@@ -30,30 +30,33 @@
     path: /usr/bin/paru
   register: _paru_bin
 
-- name: paru-bin aus AUR installieren (Bootstrap, sonst kein AUR-Helper verfuegbar)
-  # Bewusst paru-bin (vorkompiliertes Binaerpaket) statt paru aus Quellen:
-  # paru kompiliert mit LTO + codegen-units=1 (eigenes Cargo-Release-Profil),
-  # das ist sehr speicherhungrig - live auf einer 4G-RAM-VM (3G davon schon
-  # als Live-Overlay gebunden) selbst mit CARGO_BUILD_JOBS=1 noch mit
-  # "Out of memory: Killed process rustc" gescheitert. paru-bin braucht
-  # keinerlei Kompilierung, verhaelt sich als installiertes Programm
-  # identisch - robuster unabhaengig von der RAM-Ausstattung der
-  # Zielhardware.
+- name: paru aus AUR bauen (Bootstrap, sonst kein AUR-Helper verfuegbar)
+  # paru-bin (vorkompiliertes Paket) wurde hier testweise verwendet, um das
+  # OOM beim Quell-Build zu umgehen - live aber an einem ABI-Mismatch
+  # gescheitert ("libalpm.so.15: cannot open shared object file"), weil
+  # paru-bin gegen eine andere libalpm-Version gebaut ist als tatsaechlich
+  # installiert (Rolling-Release, Version kann jederzeit abweichen). Ein
+  # Quell-Build linkt dagegen immer exakt gegen die installierte libalpm.
+  # Das eigentliche OOM-Problem war die 4G-RAM-Test-VM (behoben durch mehr
+  # RAM) - CARGO_BUILD_JOBS=1 bleibt trotzdem als Sicherheitsmarge fuer
+  # schwaechere Zielhardware.
   when: not _paru_bin.stat.exists
   block:
-    - name: AUR-Quelle von paru-bin klonen
+    - name: AUR-Quelle von paru klonen
       become: true
       become_user: "{{ restore_user }}"
       ansible.builtin.git:
-        repo: https://aur.archlinux.org/paru-bin.git
-        dest: "/home/{{ restore_user }}/.cache/aur-build/paru-bin"
+        repo: https://aur.archlinux.org/paru.git
+        dest: "/home/{{ restore_user }}/.cache/aur-build/paru"
 
-    - name: paru-bin installieren
+    - name: paru bauen und installieren
       become: true
       become_user: "{{ restore_user }}"
+      environment:
+        CARGO_BUILD_JOBS: "1"
       ansible.builtin.command:
-        cmd: makepkg -si --noconfirm --needed --skippgpcheck
-        chdir: "/home/{{ restore_user }}/.cache/aur-build/paru-bin"
+        cmd: makepkg -si --noconfirm --needed
+        chdir: "/home/{{ restore_user }}/.cache/aur-build/paru"
         creates: /usr/bin/paru
 
 - name: AUR-Pakete via paru installieren
