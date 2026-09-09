@@ -52,3 +52,23 @@
   ansible.builtin.file:
     path: /etc/sudoers.d/99-ansible-aur-build
     state: absent
+
+- name: ZFS-Systemdienste aktivieren (zfs-utils erst hier oben installiert)
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+  loop:
+    - zfs-import-cache.service
+    - zfs-mount.service
+    - zfs-import.target
+    - zfs.target
+    - zfs-zed.service
+
+- name: Bluetooth-Dienst aktivieren, falls ein Paket ihn mitgebracht hat
+  # bluez kommt indirekt als Abhaengigkeit eines der obigen Pakete (kein
+  # fest eingetragener Top-Level-Package) - best-effort, kein Show-Stopper
+  # falls doch mal nicht vorhanden.
+  ansible.builtin.systemd_service:
+    name: bluetooth.service
+    enabled: true
+  failed_when: false

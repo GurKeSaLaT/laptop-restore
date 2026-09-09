@@ -87,17 +87,15 @@
     line: "%wheel ALL=(ALL:ALL) ALL"
     validate: "visudo -cf %s"
 
-- name: Systemdienste aktivieren
+- name: NetworkManager-Dienste aktivieren
+  # NetworkManager selbst ist schon aus dem Minimalsystem (Stufe 0
+  # pacstrap) da. zfs-*/bluetooth-Services dagegen erst NACH roles/packages
+  # verfuegbar (zfs-utils/bluez werden dort installiert) - deren
+  # Aktivierung steht deshalb am Ende von roles/packages, nicht hier.
   ansible.builtin.systemd_service:
     name: "{{ item }}"
     enabled: true
   loop:
-    - zfs-import-cache.service
-    - zfs-mount.service
-    - zfs-import.target
-    - zfs.target
-    - zfs-zed.service
     - NetworkManager.service
     - NetworkManager-dispatcher.service
     - NetworkManager-wait-online.service
-    - bluetooth.service
