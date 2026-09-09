@@ -12,8 +12,13 @@ durchspielen (UEFI, nicht BIOS/CSM — ZFSBootMenu braucht ein EFI-System).
   `scripts/00-disk-and-base-install.sh` interaktiv ab (Liste aller
   Laufwerke außer dem Boot-Medium) — vorher nichts in `vars.yml` anpassen
   nötig.
-- Als Live-System: Arch-ISO + `archzfs`-Bootstrap (siehe README) — im
-  QEMU-CDROM einhängen, mit `OVMF_CODE.fd` booten.
+- Als Live-System: eine ganz normale, offizielle Arch-ISO — im QEMU-CDROM
+  einhängen, mit `OVMF_CODE.fd` booten. ZFS für die Live-Session bootstrappt
+  `scripts/00-disk-and-base-install.sh` selbst (siehe README, Abschnitt
+  "Warum keine reine Alpine-Live-Umgebung?").
+- Mindestens 4G RAM für die VM — das Skript vergrößert das archiso-Overlay
+  (`cowspace`, defaultmäßig oft nur ~256M egal wie viel RAM da ist) selbst
+  auf die Hälfte des RAM, aber dafür muss natürlich genug RAM da sein.
 - Netzwerk in der VM (für `pacstrap`, AUR-Pakete, Dotfiles-Clone).
 
 ## Kurzer Testlauf

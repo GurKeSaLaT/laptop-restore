@@ -12,12 +12,13 @@ läuft. Siehe [`docs/TESTING.md`](docs/TESTING.md).
 
 Für den eigentlichen Bare-Metal-Teil (`scripts/00-disk-and-base-install.sh`)
 wird **`pacstrap`** gebraucht — ein Arch-eigenes Tool, das es auf Alpine nicht
-gibt. Empfohlen wird deshalb eine **Arch-Linux-Live-ISO mit ZFS-Unterstützung**:
-
-- Offizielle Arch-ISO + `archzfs`-Kernelmodule zur Laufzeit nachladen, z. B.
-  über das bekannte Community-Skript
-  [`eoli3n/archiso-zfs`](https://github.com/eoli3n/archiso-zfs) (`curl -O .../init && sh init`), oder
-- eine vorgebaute "Arch Linux ZFS"-ISO, die `zfs.ko` schon mitbringt.
+gibt. Empfohlen wird deshalb eine ganz normale, offizielle **Arch-Linux-Live-ISO**
+(kein spezielles ZFS-Image nötig) — `scripts/00-disk-and-base-install.sh`
+bootstrappt ZFS für die Live-Session selbst: baut `zfs-utils`+`zfs-dkms`
+**aus dem AUR** (nicht aus dem `archzfs`-Repo — dessen vorgebaute/gecachte
+Version hinkt dem Mainline-Kernel oft hinterher; live erlebt: `archzfs` hatte
+nur eine OpenZFS-Version mit Support bis Kernel 6.15, während der aktuelle
+Live-Kernel schon deutlich neuer war und nur das AUR-Paket damit zurechtkam).
 
 Alpine (oder ein anderes Live-System) eignet sich nur, wenn du Schritt 0
 (Partitionierung/Pool/`pacstrap`) manuell/anders löst und danach direkt bei

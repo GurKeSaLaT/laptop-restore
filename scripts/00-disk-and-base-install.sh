@@ -127,11 +127,43 @@ if [[ ! -d /sys/firmware/efi/efivars ]]; then
     exit 1
 fi
 
+# ZFS im Live-System bootstrappen (fuer die zpool/zfs-Befehle unten - das
+# Zielsystem bekommt sein eigenes zfs-dkms spaeter separat via roles/packages).
+# Bewusst AUR statt archzfs-Repo-Paket: archzfs' vorgebaute/gecachte
+# zfs-dkms-Version hinkt dem Mainline-Kernel oft hinterher (live erlebt:
+# archzfs-Version 2.3.3 unterstuetzte nur bis Kernel 6.15, AUR hatte zum
+# selben Zeitpunkt schon 2.4.4 mit Support fuer den aktuellen 7.2.2-Kernel).
+# --skippgpcheck: der Signing-Key fehlt im frischen Live-Keyring, fuer
+# dieses Wegwerf-Environment akzeptabel.
 if ! command -v zpool >/dev/null 2>&1; then
-    echo "FEHLER: 'zpool' nicht gefunden. ZFS-Kernelmodul/Tools fehlen im Live-System." >&2
-    echo "Siehe README.md fuer die empfohlene archzfs-Bootstrap-Methode." >&2
+    echo "--- ZFS fehlt im Live-System, baue zfs-utils+zfs-dkms aus dem AUR ---"
+    pacman -Sy --noconfirm --needed base-devel git
+
+    if ! id builder >/dev/null 2>&1; then
+        useradd -m -G wheel builder
+    fi
+    echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/99-live-zfs-build
+
+    for pkg in zfs-utils zfs-dkms; do
+        builddir="/tmp/aur-build-${pkg}"
+        rm -rf "$builddir"
+        su - builder -c "
+            set -e
+            git clone https://aur.archlinux.org/${pkg}.git '$builddir'
+            cd '$builddir'
+            makepkg -si --noconfirm --needed --skippgpcheck
+        "
+    done
+
+    rm -f /etc/sudoers.d/99-live-zfs-build
+    modprobe zfs
+fi
+
+if ! command -v zpool >/dev/null 2>&1; then
+    echo "FEHLER: ZFS-Bootstrap fehlgeschlagen, 'zpool' immer noch nicht verfuegbar." >&2
     exit 1
 fi
+echo "--- ZFS im Live-System bereit ---"
 
 loadkeys "$CONSOLE_KEYMAP" || true
 
