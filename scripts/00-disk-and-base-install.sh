@@ -18,6 +18,21 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# ansible wird HIER auf dem Live-System gebraucht (fuer den
+# ansible-playbook-Aufruf ganz am Ende dieses Skripts) - unabhaengig davon,
+# dass es weiter unten auch fuer das Zielsystem pacstrap-t wird. Auf einer
+# frischen Arch-Live-ISO ist es standardmaessig nicht installiert.
+if ! command -v ansible-playbook >/dev/null 2>&1; then
+    echo "--- ansible fehlt auf dem Live-System, installiere nach ---"
+    pacman -Sy --noconfirm --needed ansible
+fi
+
+# community.general (pacman/nmcli-Module) + ansible.posix werden von den
+# Rollen gebraucht, sind aber nicht Teil von ansible-core. Idempotent -
+# ansible-galaxy ueberspringt schon installierte Collections von selbst.
+echo "--- Ansible-Collections (community.general, ansible.posix) sicherstellen ---"
+ansible-galaxy collection install -r "$REPO_DIR/requirements.yml"
+
 # Listet alle Laufwerke auf, die als Installationsziel infrage kommen, und
 # laesst interaktiv eins auswaehlen. Schliesst das Medium, von dem gerade
 # gebootet wurde (z.B. der USB-Stick mit der Live-ISO), automatisch aus -
