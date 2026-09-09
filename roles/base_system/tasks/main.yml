@@ -57,6 +57,13 @@
     group: root
     mode: "0644"
 
+- name: Sekundaergruppen des Users vorab sicherstellen (Pakete, die sie sonst anlegen wuerden, kommen erst in roles/packages)
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ restore_user_groups }}"
+  when: item != 'wheel'
+
 - name: Benutzer {{ restore_user }} anlegen
   ansible.builtin.user:
     name: "{{ restore_user }}"
