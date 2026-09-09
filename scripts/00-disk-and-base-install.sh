@@ -301,10 +301,24 @@ fi
 echo
 echo "=== Stufe 0 fertig. Starte Stufe 1 (Ansible) ==="
 echo
+# --ask-vault-pass nur als Default, falls nicht schon eine eigene
+# Vault-Passwort-Option uebergeben wurde (--ask-vault-pass und
+# --vault-password-file schliessen sich gegenseitig aus - beides fest zu
+# setzen bricht mit "not allowed with argument", live so gefunden).
+vault_args=(--ask-vault-pass)
+for arg in "$@"; do
+    case "$arg" in
+        --vault-password-file*|--vault-pass-file*|--ask-vault-pass|--ask-vault-password|-J)
+            vault_args=()
+            break
+            ;;
+    esac
+done
+
 # disk_device explizit ueberschreiben: group_vars/all/vars.yml enthaelt nur
 # einen Default-Vorschlag (echte Hardware), das tatsaechliche Ziel wurde
 # oben interaktiv ausgewaehlt.
-ansible-playbook -i inventory/chroot.ini site.yml --ask-vault-pass \
+ansible-playbook -i inventory/chroot.ini site.yml "${vault_args[@]}" \
     -e "disk_device=${DISK_DEVICE}" "$@"
 status=$?
 
