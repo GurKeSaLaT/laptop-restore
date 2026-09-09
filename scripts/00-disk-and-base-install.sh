@@ -18,6 +18,20 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# archiso's Live-Overlay (cowspace) hat oft eine feste, kleine Groesse
+# (z.B. 256M) unabhaengig vom tatsaechlich vorhandenen RAM - live in einer
+# 4G-RAM-VM beobachtet, reichte nicht mal fuer die ansible-Installation
+# ("Partition / too full"). Auf die Haelfte des RAM vergroessern (min. 1G),
+# falls es dieses Overlay gibt.
+cowspace_mount="$(mount | awk '/cowspace/ {print $3; exit}')"
+if [[ -n "$cowspace_mount" ]]; then
+    total_mem_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
+    target_mb=$(( total_mem_kb / 1024 / 2 ))
+    (( target_mb < 1024 )) && target_mb=1024
+    echo "--- Live-Overlay ($cowspace_mount) auf ${target_mb}M vergroessern ---"
+    mount -o "remount,size=${target_mb}M" "$cowspace_mount"
+fi
+
 # ansible wird HIER auf dem Live-System gebraucht (fuer den
 # ansible-playbook-Aufruf ganz am Ende dieses Skripts) - unabhaengig davon,
 # dass es weiter unten auch fuer das Zielsystem pacstrap-t wird. Auf einer
