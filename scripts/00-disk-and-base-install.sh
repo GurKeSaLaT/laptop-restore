@@ -147,16 +147,22 @@ if ! command -v zpool >/dev/null 2>&1; then
     for pkg in zfs-utils zfs-dkms; do
         builddir="/tmp/aur-build-${pkg}"
         rm -rf "$builddir"
+        # || true: makepkg -si ruft am Ende pacmans mkinitcpio-Hook auf, der
+        # im Live-Overlay auf /boot/vmlinuz-linux nicht zugreifen kann und
+        # deshalb mit Exit != 0 abbricht - das Paket (inkl. dkms-Modulbau)
+        # ist zu dem Zeitpunkt aber schon erfolgreich installiert, nur das
+        # (hier irrelevante) Live-Boot-Image wird nicht neu gebaut. Ob der
+        # eigentliche ZFS-Bootstrap geklappt hat, prueft der Block danach.
         su - builder -c "
             set -e
             git clone https://aur.archlinux.org/${pkg}.git '$builddir'
             cd '$builddir'
             makepkg -si --noconfirm --needed --skippgpcheck
-        "
+        " || true
     done
 
     rm -f /etc/sudoers.d/99-live-zfs-build
-    modprobe zfs
+    modprobe zfs || true
 fi
 
 if ! command -v zpool >/dev/null 2>&1; then
