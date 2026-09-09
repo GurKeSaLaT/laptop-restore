@@ -280,10 +280,24 @@ if [[ -d /sys/firmware/efi/efivars ]]; then
 fi
 
 cleanup() {
+    local exit_status=$?
     echo "--- Raeume Bind-Mounts unter /mnt auf ---"
     umount -R /mnt/dev 2>/dev/null || true
     umount -R /mnt/sys 2>/dev/null || true
     umount -R /mnt/proc 2>/dev/null || true
+
+    if [[ $exit_status -ne 0 ]]; then
+        # Im Fehlerfall so gruendlich wie moeglich aufraeumen, damit der
+        # naechste Versuch nicht auf einen noch "aktiven" Pool trifft
+        # ("is part of active pool" bei zpool create). zfs unmount -a statt
+        # rohem umount, weil das ZFS' eigene Buchfuehrung mitnimmt. Bei
+        # Erfolg bewusst NICHT aushaengen - siehe Abschlussmeldung unten,
+        # der Nutzer soll vor dem manuellen Reboot noch pruefen koennen.
+        echo "--- Fehlerfall: EFI-Partition + ZFS-Pool sauber aushaengen ---"
+        umount /mnt/boot/efi 2>/dev/null || true
+        zfs unmount -a 2>/dev/null || true
+        zpool export "$ZPOOL_NAME" 2>/dev/null || true
+    fi
 }
 trap cleanup EXIT
 
