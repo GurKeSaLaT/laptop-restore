@@ -25,35 +25,35 @@
     mode: "0440"
     validate: "visudo -cf %s"
 
-- name: Pruefen ob paru schon gebaut ist
+- name: Pruefen ob paru schon installiert ist
   ansible.builtin.stat:
     path: /usr/bin/paru
   register: _paru_bin
 
-- name: paru aus AUR bauen (Bootstrap, sonst kein AUR-Helper verfuegbar)
+- name: paru-bin aus AUR installieren (Bootstrap, sonst kein AUR-Helper verfuegbar)
+  # Bewusst paru-bin (vorkompiliertes Binaerpaket) statt paru aus Quellen:
+  # paru kompiliert mit LTO + codegen-units=1 (eigenes Cargo-Release-Profil),
+  # das ist sehr speicherhungrig - live auf einer 4G-RAM-VM (3G davon schon
+  # als Live-Overlay gebunden) selbst mit CARGO_BUILD_JOBS=1 noch mit
+  # "Out of memory: Killed process rustc" gescheitert. paru-bin braucht
+  # keinerlei Kompilierung, verhaelt sich als installiertes Programm
+  # identisch - robuster unabhaengig von der RAM-Ausstattung der
+  # Zielhardware.
   when: not _paru_bin.stat.exists
   block:
-    - name: AUR-Quelle von paru klonen
+    - name: AUR-Quelle von paru-bin klonen
       become: true
       become_user: "{{ restore_user }}"
       ansible.builtin.git:
-        repo: https://aur.archlinux.org/paru.git
-        dest: "/home/{{ restore_user }}/.cache/aur-build/paru"
+        repo: https://aur.archlinux.org/paru-bin.git
+        dest: "/home/{{ restore_user }}/.cache/aur-build/paru-bin"
 
-    - name: paru bauen und installieren
+    - name: paru-bin installieren
       become: true
       become_user: "{{ restore_user }}"
-      # CARGO_BUILD_JOBS=1: paru kompiliert mit LTO + codegen-units=1
-      # (eigenes Cargo-Release-Profil), das ist sehr speicherhungrig -
-      # live auf einer 4G-RAM-VM (3G davon schon als Live-Overlay
-      # gebunden) mit "Out of memory: Killed process rustc" gescheitert.
-      # Ein Compile-Job statt parallel senkt den Speicher-Peak deutlich,
-      # kostet dafuer etwas mehr Zeit.
-      environment:
-        CARGO_BUILD_JOBS: "1"
       ansible.builtin.command:
-        cmd: makepkg -si --noconfirm --needed
-        chdir: "/home/{{ restore_user }}/.cache/aur-build/paru"
+        cmd: makepkg -si --noconfirm --needed --skippgpcheck
+        chdir: "/home/{{ restore_user }}/.cache/aur-build/paru-bin"
         creates: /usr/bin/paru
 
 - name: AUR-Pakete via paru installieren
