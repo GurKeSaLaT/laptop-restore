@@ -16,16 +16,20 @@ durchspielen (UEFI, nicht BIOS/CSM — ZFSBootMenu braucht ein EFI-System).
   einhängen, mit `OVMF_CODE.fd` booten. ZFS für die Live-Session bootstrappt
   `scripts/00-disk-and-base-install.sh` selbst (siehe README, Abschnitt
   "Warum keine reine Alpine-Live-Umgebung?").
-- Mindestens 4G RAM für die VM — das Skript vergrößert das archiso-Overlay
-  (`cowspace`, defaultmäßig oft nur ~256M egal wie viel RAM da ist) selbst
-  auf die Hälfte des RAM, aber dafür muss natürlich genug RAM da sein.
+- Mindestens 6G RAM für die VM, eher mehr. Das Skript vergrößert das
+  archiso-Overlay (`cowspace`, defaultmäßig oft nur ~256M egal wie viel RAM
+  da ist) selbst auf 75% des RAM — bei nur 4G blieb dafür zu wenig frei,
+  live mit "Out of memory: Killed process rustc" beim `paru`-Bau
+  gescheitert (kompiliert mit LTO, speicherhungrig). `roles/packages`
+  begrenzt den paru-Build zwar auf einen Compile-Job, um den Speicher-Peak
+  zu senken, aber grundsätzlich mehr RAM einplanen ist trotzdem sicherer.
 - Netzwerk in der VM (für `pacstrap`, AUR-Pakete, Dotfiles-Clone).
 
 ## Kurzer Testlauf
 
 ```bash
 qemu-img create -f qcow2 test.qcow2 20G
-qemu-system-x86_64 -enable-kvm -m 4096 -smp 2 \
+qemu-system-x86_64 -enable-kvm -m 6144 -smp 2 \
   -drive if=virtio,file=test.qcow2,format=qcow2 \
   -cdrom archlinux-x86_64.iso \
   -bios /usr/share/ovmf/x64/OVMF.4m.fd \

@@ -43,6 +43,14 @@
     - name: paru bauen und installieren
       become: true
       become_user: "{{ restore_user }}"
+      # CARGO_BUILD_JOBS=1: paru kompiliert mit LTO + codegen-units=1
+      # (eigenes Cargo-Release-Profil), das ist sehr speicherhungrig -
+      # live auf einer 4G-RAM-VM (3G davon schon als Live-Overlay
+      # gebunden) mit "Out of memory: Killed process rustc" gescheitert.
+      # Ein Compile-Job statt parallel senkt den Speicher-Peak deutlich,
+      # kostet dafuer etwas mehr Zeit.
+      environment:
+        CARGO_BUILD_JOBS: "1"
       ansible.builtin.command:
         cmd: makepkg -si --noconfirm --needed
         chdir: "/home/{{ restore_user }}/.cache/aur-build/paru"
