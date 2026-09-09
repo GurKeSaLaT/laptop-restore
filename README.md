@@ -118,6 +118,14 @@ git config core.hooksPath scripts/git-hooks
 - Basis-Systemkonfiguration (Hostname, Locale, Zeitzone, Konsolen-Keymap,
   Benutzer, sudo).
 - Paketliste (offizielle Repos + AUR via `paru`).
+- **Hardware-Erkennung** (`roles/hardware`): CPU-Microcode
+  (`intel-ucode`/`amd-ucode`) und GPU-Vulkan-Treiber
+  (`vulkan-intel`/`vulkan-radeon`/`nvidia-open` + jeweilige `lib32-*`,
+  auch mehrere gleichzeitig bei Hybrid-Grafik) werden zur Laufzeit anhand
+  der tatsächlichen Zielhardware ermittelt (`/proc/cpuinfo`,
+  `/sys/bus/pci`), nicht fest im Referenzsystem verdrahtet — das Playbook
+  läuft damit auch auf anderer Hardware als dem einen Laptop, für den es
+  ursprünglich gebaut wurde.
 - **SSH-Zugriff, neu** (auf dem Referenzsystem bisher nicht aktiv): `sshd`
   aktiviert, ausschließlich Public-Key-Auth (`PasswordAuthentication no`,
   `PermitRootLogin no`). Privater Schlüssel liegt **nicht** in diesem Repo,
@@ -170,6 +178,7 @@ git config core.hooksPath scripts/git-hooks
 │   └── vault.yml.example             # Vorlage — kopieren, ausfüllen, verschlüsseln
 └── roles/
     ├── base_system/      # Hostname, Locale, Zeitzone, User, sudo
+    ├── hardware/          # CPU-/GPU-Erkennung -> ucode_pkg/gpu_packages
     ├── packages/          # pacman + AUR (paru)
     ├── zfsbootmenu/       # generate-zbm, EFI-Fallback, efibootmgr
     ├── boot_environments/ # zectl + eigene Skripte

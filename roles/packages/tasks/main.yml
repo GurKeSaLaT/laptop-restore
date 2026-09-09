@@ -1,11 +1,19 @@
 ---
+- name: multilib-Repo aktivieren (fuer lib32-*-GPU-Treiber)
+  ansible.builtin.blockinfile:
+    path: /etc/pacman.conf
+    marker: "# {mark} ANSIBLE MANAGED BLOCK (multilib)"
+    block: |
+      [multilib]
+      Include = /etc/pacman.d/mirrorlist
+
 - name: Paketdatenbank aktualisieren
   community.general.pacman:
     update_cache: true
 
 - name: Pakete aus offiziellen Repos installieren
   community.general.pacman:
-    name: "{{ pacman_packages + [fish_package] }}"
+    name: "{{ pacman_packages + [fish_package] + gpu_packages + ([ucode_pkg] if ucode_pkg else []) }}"
     state: present
 
 - name: Temporaeres NOPASSWD fuer AUR-Builds (wird am Ende wieder entfernt)

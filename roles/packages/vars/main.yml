@@ -5,6 +5,11 @@
 # pacman_packages = explizit MINUS foreign. aur_packages = foreign
 # (ohne paru/paru-debug, die per Bootstrap-Task separat gebaut werden).
 
+# CPU-Microcode (intel-ucode/amd-ucode) und GPU-Vulkan-Treiber
+# (vulkan-intel/-radeon, lib32-Pendants) stehen bewusst NICHT hier -
+# die haengen von der tatsaechlichen Zielhardware ab und werden von
+# roles/hardware erkannt (ucode_pkg/gpu_packages), nicht hart hier
+# eingetragen. Macht das Playbook hardwareunabhaengig nutzbar.
 pacman_packages:
   - aircrack-ng
   - docker
@@ -15,9 +20,7 @@ pacman_packages:
   - hashcat
   - hcxdumptool
   - hcxtools
-  - intel-ucode
   - less
-  - lib32-vulkan-intel
   - linux-firmware
   - "{{ kernel_pkg }}"
   - "{{ kernel_headers_pkg }}"
@@ -33,7 +36,6 @@ pacman_packages:
   - tree
   - unzip
   - vim
-  - vulkan-intel
   - wavemon
   - wireshark-qt
   - zip

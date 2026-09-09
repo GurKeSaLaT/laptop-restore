@@ -254,8 +254,13 @@ echo "--- pacstrap: Minimalsystem (Rest kommt via Ansible/paru) ---"
 # (braucht dafuer nur linux-lts-headers+base-devel, die hier schon
 # pacstrap-t werden) - das Live-System braucht sein eigenes, per
 # archzfs/eoli3n geladenes zfs.ko nur fuer die zpool/zfs-Befehle oben.
+# CPU-Microcode (intel-ucode/amd-ucode) ebenfalls bewusst NICHT hier fest
+# eingetragen - roles/hardware erkennt den tatsaechlichen CPU-Hersteller
+# per /proc/cpuinfo (via /mnt/proc bind-mount unten real sichtbar) und
+# roles/packages installiert das passende Paket. Macht dieses Skript
+# unabhaengig von der konkreten Zielhardware.
 pacstrap -K /mnt \
-    base base-devel "$KERNEL_PKG" "$KERNEL_HEADERS_PKG" linux-firmware intel-ucode \
+    base base-devel "$KERNEL_PKG" "$KERNEL_HEADERS_PKG" linux-firmware \
     networkmanager networkmanager-openvpn \
     git ansible python sudo vim efibootmgr dosfstools mtools nftables openvpn
 

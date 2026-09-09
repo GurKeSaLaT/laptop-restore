@@ -26,6 +26,12 @@ mapfile -t pacman_only < <(comm -23 <(printf '%s\n' "${explicit[@]}") <(printf '
     echo "#                   ohne paru/paru-debug - die baut roles/packages per"
     echo "#                   eigenem Bootstrap-Task (Henne-Ei: paru installiert"
     echo "#                   sich nicht selbst)."
+    echo "#"
+    echo "# CPU-Microcode + GPU-Vulkan-Treiber (intel-ucode/amd-ucode,"
+    echo "# vulkan-intel/-radeon, lib32-Pendants, nvidia*) bewusst NICHT hier -"
+    echo "# die erkennt roles/hardware zur Laufzeit von der Zielhardware, sonst"
+    echo "# wuerde dieses Skript sie von DIESEM Rechner aus fest eintragen und"
+    echo "# das Playbook wieder an genau diese Hardware binden."
     echo
     echo "pacman_packages:"
     for p in "${pacman_only[@]}"; do
@@ -33,6 +39,9 @@ mapfile -t pacman_only < <(comm -23 <(printf '%s\n' "${explicit[@]}") <(printf '
             "$KERNEL_PKG") echo '  - "{{ kernel_pkg }}"' ;;
             "$KERNEL_HEADERS_PKG") echo '  - "{{ kernel_headers_pkg }}"' ;;
             fish) : ;; # separat ueber fish_package unten
+            intel-ucode|amd-ucode) : ;; # roles/hardware -> ucode_pkg
+            vulkan-intel|lib32-vulkan-intel|vulkan-radeon|lib32-vulkan-radeon) : ;; # roles/hardware -> gpu_packages
+            nvidia|nvidia-open|nvidia-utils|lib32-nvidia-utils) : ;; # roles/hardware -> gpu_packages
             *) echo "  - $p" ;;
         esac
     done

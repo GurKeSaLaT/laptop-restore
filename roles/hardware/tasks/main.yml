@@ -1,0 +1,47 @@
+---
+# Erkennt CPU-/GPU-Hersteller der tatsaechlichen Zielhardware und setzt
+# ucode_pkg/gpu_packages, die roles/packages dann installiert. Laeuft
+# bewusst OHNE Zusatzpaket (kein lspci/pciutils noetig) direkt ueber
+# /proc + /sys - die sind in Stufe 0 nach /mnt bind-gemountet, zeigen
+# also selbst im chroot die echte Hardware, nicht irgendwas Generisches.
+# Macht das Playbook unabhaengig vom konkreten Referenz-Laptop nutzbar.
+
+- name: CPU-Hersteller ermitteln
+  ansible.builtin.command: "awk -F: '/vendor_id/ {print $2; exit}' /proc/cpuinfo"
+  register: _cpu_vendor
+  changed_when: false
+
+- name: Microcode-Paket festlegen
+  ansible.builtin.set_fact:
+    ucode_pkg: >-
+      {{
+        'intel-ucode' if 'GenuineIntel' in _cpu_vendor.stdout
+        else ('amd-ucode' if 'AuthenticAMD' in _cpu_vendor.stdout else '')
+      }}
+
+- name: PCI-Grafikgeraete (Vendor-IDs) ermitteln
+  ansible.builtin.shell: |
+    set -e
+    for dev in /sys/bus/pci/devices/*/; do
+      class="$(cat "${dev}class" 2>/dev/null || true)"
+      case "$class" in
+        0x03*) cat "${dev}vendor" 2>/dev/null ;;
+      esac
+    done
+  args:
+    executable: /bin/bash
+  register: _gpu_vendor_ids
+  changed_when: false
+
+- name: GPU-Vulkan-Treiberpakete zusammenstellen (mehrere moeglich bei Hybrid-Grafik)
+  ansible.builtin.set_fact:
+    gpu_packages: >-
+      {{
+        (['vulkan-intel', 'lib32-vulkan-intel'] if '0x8086' in _gpu_vendor_ids.stdout_lines else [])
+        + (['vulkan-radeon', 'lib32-vulkan-radeon'] if '0x1002' in _gpu_vendor_ids.stdout_lines else [])
+        + (['nvidia-open', 'nvidia-utils', 'lib32-nvidia-utils'] if '0x10de' in _gpu_vendor_ids.stdout_lines else [])
+      }}
+
+- name: Erkannte Hardware anzeigen
+  ansible.builtin.debug:
+    msg: "CPU-Vendor: {{ _cpu_vendor.stdout }} -> {{ ucode_pkg or '(kein Microcode-Paket gefunden)' }} | GPU-Pakete: {{ gpu_packages }}"

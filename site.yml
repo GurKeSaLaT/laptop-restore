@@ -10,6 +10,8 @@
   roles:
     - role: base_system
       tags: [base_system]
+    - role: hardware
+      tags: [hardware, packages]
     - role: packages
       tags: [packages]
     - role: zfsbootmenu
