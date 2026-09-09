@@ -21,12 +21,14 @@ fi
 # archiso's Live-Overlay (cowspace) hat oft eine feste, kleine Groesse
 # (z.B. 256M) unabhaengig vom tatsaechlich vorhandenen RAM - live in einer
 # 4G-RAM-VM beobachtet, reichte nicht mal fuer die ansible-Installation
-# ("Partition / too full"). Auf die Haelfte des RAM vergroessern (min. 1G),
-# falls es dieses Overlay gibt.
+# ("Partition / too full"). Auf 75% des RAM vergroessern (min. 1G), falls
+# es dieses Overlay gibt - 50% reichte live selbst mit Cache-Aufraeumen
+# zwischendurch noch knapp nicht (base-devel-Toolchain + Kernel-Header +
+# zwei AUR-Builds fuer den ZFS-Bootstrap kommen einiges zusammen).
 cowspace_mount="$(mount | awk '/cowspace/ {print $3; exit}')"
 if [[ -n "$cowspace_mount" ]]; then
     total_mem_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo)"
-    target_mb=$(( total_mem_kb / 1024 / 2 ))
+    target_mb=$(( total_mem_kb * 3 / 1024 / 4 ))
     (( target_mb < 1024 )) && target_mb=1024
     echo "--- Live-Overlay ($cowspace_mount) auf ${target_mb}M vergroessern ---"
     mount -o "remount,size=${target_mb}M" "$cowspace_mount"
@@ -137,6 +139,24 @@ fi
 # dieses Wegwerf-Environment akzeptabel.
 if ! command -v zpool >/dev/null 2>&1; then
     echo "--- ZFS fehlt im Live-System, baue zfs-utils+zfs-dkms aus dem AUR ---"
+
+    # linux-headers MUSS exakt zum laufenden Live-Kernel passen (dkms baut
+    # gegen die Header, nicht gegen "irgendeinen aktuellen Kernel"). Ein
+    # simples "pacman -S linux-headers" zieht nach einem vorherigen
+    # "pacman -Sy" (s.o. fuer ansible etc.) die NEUESTE im Repo verfuegbare
+    # Version - die kann schon neuer sein als der tatsaechlich gebootete
+    # Live-Kernel (auf einem rolling-release-Spiegel jederzeit moeglich,
+    # live beobachtet: Kernel 7.2.2 lief, Repo hatte schon 7.2.4). Deshalb
+    # exakt passende Version explizit aus dem Arch Linux Archive ziehen.
+    running_kver="$(pacman -Q linux | awk '{print $2}')"
+    installed_headers_kver="$(pacman -Q linux-headers 2>/dev/null | awk '{print $2}' || true)"
+    if [[ "$installed_headers_kver" != "$running_kver" ]]; then
+        echo "--- linux-headers ${running_kver} (exakt passend zum laufenden Kernel) installieren ---"
+        pacman -R --noconfirm --nodeps linux-headers 2>/dev/null || true
+        pacman -U --noconfirm \
+            "https://archive.archlinux.org/packages/l/linux-headers/linux-headers-${running_kver}-x86_64.pkg.tar.zst"
+    fi
+
     pacman -Sy --noconfirm --needed base-devel git
 
     if ! id builder >/dev/null 2>&1; then
@@ -159,6 +179,12 @@ if ! command -v zpool >/dev/null 2>&1; then
             cd '$builddir'
             makepkg -si --noconfirm --needed --skippgpcheck
         " || true
+        # Build-Artefakte + Paket-Cache sofort wieder freigeben - das
+        # Live-Overlay ist trotz Auto-Vergroesserung (s.o.) knapp, live
+        # erlebt: "No space left on device" beim dkms-Build nach zwei
+        # AUR-Builds inkl. base-devel-Toolchain + Kernel-Headern.
+        rm -rf "$builddir"
+        pacman -Scc --noconfirm >/dev/null 2>&1 || true
     done
 
     rm -f /etc/sudoers.d/99-live-zfs-build
