@@ -199,6 +199,16 @@ echo "--- ZFS im Live-System bereit ---"
 
 loadkeys "$CONSOLE_KEYMAP" || true
 
+# Reste eines vorherigen, abgebrochenen Laufs aufraeumen (z.B. falsches
+# Vault-Passwort beim letzten Versuch - das Skript endet dann zwar mit
+# Fehler, haengt aber /mnt/boot/efi und den ZFS-Pool nicht automatisch
+# wieder aus, live beobachtet: "mkfs.vfat: /dev/vdaX contains a mounted
+# filesystem" beim naechsten Versuch). Alles per || true, da es beim
+# allerersten Lauf nichts zum Aufraeumen gibt.
+echo "--- Reste eines vorherigen Laufs aufraeumen (falls vorhanden) ---"
+umount -R /mnt 2>/dev/null || true
+zpool export "$ZPOOL_NAME" 2>/dev/null || true
+
 echo "--- Partitioniere $DISK_DEVICE ---"
 wipefs -af "$DISK_DEVICE"
 sgdisk --zap-all "$DISK_DEVICE"
