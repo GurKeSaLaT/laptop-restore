@@ -41,33 +41,32 @@ pacman_packages:
   - zip
 
 # Reihenfolge bewusst so belassen, wie auf dem Referenzsystem vorgefunden.
+#
+# NICHT hier (bewusst entfernt gegenueber der reinen pacman -Qqm-Erhebung):
+# - Alle "illogical-impulse-*" Pakete: das sind KEINE echten AUR-Pakete -
+#   AUR-RPC-Suche findet sie nicht, weil sie nie dort veroeffentlicht wurden.
+#   Es sind lokale PKGBUILD-Verzeichnisse IM end-4/dots-hyprland-Repo selbst
+#   (sdata/dist-arch/illogical-impulse-*/), die dessen eigenes
+#   "./setup install" (-> install-deps.sh) lokal baut. roles/dotfiles ruft
+#   das bereits auf (und laeuft nach dieser Rolle) - "paru -S
+#   illogical-impulse-*" haette hier nie funktionieren koennen, live mit
+#   "could not find all required packages" bestaetigt.
+# - "*-debug"-Pakete (html2markdown-debug, yay-bin-debug, ...): das sind
+#   automatisch erzeugte Debug-Symbol-Splitpakete, die nur als Nebenprodukt
+#   beim Bauen des zugehoerigen Hauptpakets entstehen (siehe paru/paru-debug
+#   oben) - nie eigenstaendig aus dem AUR installierbar.
+# - "python-pkg_resources": auf dem AUR nicht (mehr) auffindbar, vermutlich
+#   upstream in setuptools aufgegangen - nicht essenziell.
 aur_packages:
   - adw-gtk-theme-git
   - breeze-plus
   - darkly-bin
   - etcher-bin
   - html2markdown
-  - html2markdown-debug
-  - illogical-impulse-audio
-  - illogical-impulse-backlight
-  - illogical-impulse-basic
-  - illogical-impulse-bibata-modern-classic-bin
-  - illogical-impulse-fonts-themes
-  - illogical-impulse-hyprland
-  - illogical-impulse-kde
-  - illogical-impulse-microtex-git
-  - illogical-impulse-microtex-git-debug
-  - illogical-impulse-portal
-  - illogical-impulse-python
-  - illogical-impulse-quickshell-git
-  - illogical-impulse-screencapture
-  - illogical-impulse-toolkit
-  - illogical-impulse-widgets
   - kirigami2
   - litehtml0.9
   - nm-sidebar
   - otf-space-grotesk
-  - python-pkg_resources
   - qt6-avif-image-plugin
   - ttf-material-symbols-variable-git
   - ttf-readex-pro
@@ -76,7 +75,6 @@ aur_packages:
   - vpnfailsafe-git
   - wlogout
   - yay-bin
-  - yay-bin-debug
   - zectl
   - zectl-pacman-hook
   # Nicht aus offiziellen Repos installierbar (siehe scripts/00-disk-and-base-install.sh) -

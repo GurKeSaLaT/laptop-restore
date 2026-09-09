@@ -27,6 +27,14 @@ mapfile -t pacman_only < <(comm -23 <(printf '%s\n' "${explicit[@]}") <(printf '
     echo "#                   eigenem Bootstrap-Task (Henne-Ei: paru installiert"
     echo "#                   sich nicht selbst)."
     echo "#"
+    echo "# 'illogical-impulse-*' und '*-debug' bewusst NICHT hier: das sind"
+    echo "# keine echten AUR-Pakete (illogical-impulse-* baut end-4/dots-hyprlands"
+    echo "# eigenes './setup install' lokal aus im Repo mitgelieferten PKGBUILDs,"
+    echo "# *-debug sind Debug-Symbol-Splitpakete, nie eigenstaendig installierbar)"
+    echo "# - 'paru -S' scheitert live daran mit 'could not find all required"
+    echo "# packages'. pacman -Qqm listet sie trotzdem als 'foreign', deshalb hier"
+    echo "# explizit rausgefiltert statt sie blind zu uebernehmen."
+    echo "#"
     echo "# CPU-Microcode + GPU-Vulkan-Treiber (intel-ucode/amd-ucode,"
     echo "# vulkan-intel/-radeon, lib32-Pendants, nvidia*) bewusst NICHT hier -"
     echo "# die erkennt roles/hardware zur Laufzeit von der Zielhardware, sonst"
@@ -50,6 +58,8 @@ mapfile -t pacman_only < <(comm -23 <(printf '%s\n' "${explicit[@]}") <(printf '
     for p in "${foreign[@]}"; do
         case "$p" in
             paru|paru-debug) : ;;
+            illogical-impulse-*) : ;; # lokal von end-4/dots-hyprlands ./setup install gebaut, kein AUR-Paket
+            *-debug) : ;; # Debug-Symbol-Splitpaket, nie eigenstaendig installierbar
             *) echo "  - $p" ;;
         esac
     done
