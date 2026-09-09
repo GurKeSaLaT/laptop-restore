@@ -1,0 +1,6 @@
+[Unit]
+Description=VPN kill-switch state check
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vpn-killswitch-apply

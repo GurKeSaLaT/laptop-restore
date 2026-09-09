@@ -1,0 +1,113 @@
+#!/bin/bash
+# Kill-switch state machine: HOME (accept-all) / PORTAL (captive portal window) / STRICT (locked, VPN or nothing)
+# VPN wird als systemd-Service verwaltet (openvpn-client@normal-1194-udp.service), nicht ueber NetworkManager.
+# Called from NetworkManager dispatcher (90-vpn-killswitch) and vpn-killswitch.timer.
+
+VPN_SERVICE="openvpn-client@{{ vpn_connection_name }}.service"
+VPN_HOST="{{ vault_vpn_server_host }}"
+VPN_PORT="{{ vpn_server_port }}"
+NM_CHECK_HOST="{{ vpn_nm_check_host }}"
+OVERRIDE_FILE="/run/vpn-killswitch-override"
+STATE_FILE="/run/vpn-killswitch-state"
+
+log() { logger -t vpn-killswitch "$*"; }
+
+resolve() { getent ahostsv4 "$1" 2>/dev/null | awk '{print $1; exit}'; }
+
+phys_if() {
+    ip -4 route show default 2>/dev/null | awk '{
+        for (i=1;i<=NF;i++) if ($i=="dev" && $(i+1)!="tun0") { print $(i+1); exit }
+    }'
+}
+
+apply_ruleset() {
+    local mode="$1" vpn_ip="$2"
+    local ipify_ip icanhaz_ip nmcheck_ip extra=""
+
+    if [ "$mode" = "HOME" ]; then
+        nft -f - <<'EOF'
+flush ruleset
+table inet vpnks {
+    chain output {
+        type filter hook output priority 0; policy accept;
+    }
+}
+EOF
+        return
+    fi
+
+    ipify_ip=$(resolve api.ipify.org)
+    icanhaz_ip=$(resolve icanhazip.com)
+    nmcheck_ip=$(resolve "$NM_CHECK_HOST")
+    [ "$mode" = "PORTAL" ] && extra='ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 } tcp dport { 80, 443 } accept'
+
+    {
+        echo 'flush ruleset'
+        echo 'table inet vpnks {'
+        echo '    chain output {'
+        echo '        type filter hook output priority 0; policy drop;'
+        echo '        oifname "lo" accept'
+        echo '        ct state established,related accept'
+        echo '        udp sport 68 udp dport 67 accept'
+        echo '        udp dport 53 accept'
+        echo '        tcp dport 53 accept'
+        echo '        oifname "tun0" accept'
+        [ -n "$vpn_ip" ] && echo "        ip daddr $vpn_ip udp dport $VPN_PORT accept"
+        [ -n "$ipify_ip" ] && echo "        ip daddr $ipify_ip tcp dport 443 accept"
+        [ -n "$icanhaz_ip" ] && echo "        ip daddr $icanhaz_ip tcp dport 443 accept"
+        [ -n "$nmcheck_ip" ] && echo "        ip daddr $nmcheck_ip tcp dport { 80, 443 } accept"
+        [ -n "$extra" ] && echo "        $extra"
+        echo '        log prefix "vpnks-drop: " limit rate 20/second'
+        echo '    }'
+        echo '}'
+    } | nft -f -
+}
+
+main() {
+    local vpn_ip mode phys my_ip prev connectivity
+
+    vpn_ip=$(resolve "$VPN_HOST")
+
+    if [ -e "$OVERRIDE_FILE" ]; then
+        mode="HOME"
+    else
+        phys=$(phys_if)
+        my_ip=""
+        if [ -n "$phys" ]; then
+            my_ip=$(curl -s --max-time 4 --interface "$phys" https://api.ipify.org)
+            if [ -z "$my_ip" ]; then
+                my_ip=$(curl -s --max-time 4 --interface "$phys" https://icanhazip.com | tr -d '[:space:]')
+            fi
+        fi
+
+        if [ -n "$my_ip" ] && [ -n "$vpn_ip" ] && [ "$my_ip" = "$vpn_ip" ]; then
+            mode="HOME"
+        else
+            connectivity=$(nmcli networking connectivity check 2>/dev/null)
+            case "$connectivity" in
+                portal|limited) mode="PORTAL" ;;
+                *) mode="STRICT" ;;
+            esac
+        fi
+    fi
+
+    prev=$(cat "$STATE_FILE" 2>/dev/null)
+    if [ "$mode" != "$prev" ]; then
+        apply_ruleset "$mode" "$vpn_ip"
+        echo "$mode" > "$STATE_FILE"
+        log "state -> $mode (phys=${phys:-none} my_ip=${my_ip:-?} vpn_ip=${vpn_ip:-?})"
+    fi
+
+    if [ "$mode" = "HOME" ]; then
+        if systemctl is-active --quiet "$VPN_SERVICE"; then
+            systemctl stop "$VPN_SERVICE"
+            log "im Heimnetz, VPN-Service gestoppt"
+        fi
+    else
+        if ! systemctl is-active --quiet "$VPN_SERVICE"; then
+            systemctl start "$VPN_SERVICE"
+        fi
+    fi
+}
+
+main "$@"

@@ -1,0 +1,21 @@
+---
+# roles/zfsbootmenu - rekonstruierte Config (Original-Tool war auf dem
+# Referenzsystem nicht mehr installiert, siehe docs/NOT_COVERED.md).
+# Naming ohne Versionsnummern (Versions: false) passt zu den vorgefundenen
+# Dateien VMLINUZ.EFI / VMLINUZ-BACKUP.EFI.
+Global:
+  ManageImages: true
+  BootMountPoint: /boot/efi
+  InitCPIO: true
+Components:
+  Enabled: false
+  ImageDir: /boot/efi/EFI/ZBM
+  Versions: false
+EFI:
+  Enabled: true
+  ImageDir: /boot/efi/EFI/ZBM
+  Versions: false
+  Efibootmgr:
+    Enabled: true
+Kernel:
+  CommandLine: ro quiet loglevel=0

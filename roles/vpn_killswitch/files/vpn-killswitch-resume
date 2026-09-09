@@ -1,0 +1,19 @@
+#!/bin/bash
+# systemd-sleep Hook: erzwingt beim Aufwachen aus dem Schlaf einen sofortigen VPN-Neustart,
+# statt auf OpenVPNs eigene (langsame/unzuverlaessige) Dead-Link-Erkennung zu warten.
+# WICHTIG: muss unter /usr/lib/systemd/system-sleep/ liegen (nicht /etc/...) -
+# diese systemd-Version (261) scannt nur das lib-Verzeichnis.
+# Wird von systemd-logind automatisch mit $1=pre|post und $2=<sleep-verb> aufgerufen.
+# Die eigentliche Wartelogik steckt in vpn-killswitch-resume-worker und wird per
+# "systemd-run" als eigenstaendige Unit gestartet - einfaches Backgrounding (& disown)
+# im Hook selbst wurde vermutlich zusammen mit dem Hook-Scope gekillt (kein Effekt
+# im Test), systemd-run entkoppelt das sauber.
+
+if [ "$1" = "post" ]; then
+    rm -f /run/vpn-killswitch-state
+    if systemctl is-active --quiet openvpn-client@normal-1194-udp.service; then
+        systemd-run --unit=vpn-killswitch-resume-worker \
+            --description="VPN Kill-Switch Resume Reconnect" \
+            /usr/local/sbin/vpn-killswitch-resume-worker
+    fi
+fi

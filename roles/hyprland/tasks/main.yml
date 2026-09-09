@@ -1,0 +1,26 @@
+---
+- name: Zielverzeichnis fuer Hyprland-Config sicherstellen
+  ansible.builtin.file:
+    path: "/home/{{ restore_user }}/.config/hypr/hyprland"
+    state: directory
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0755"
+
+- name: general.lua deployen (Gaps, Animationen, Gesten)
+  # Bewusst copy statt template: die Lua-Tabellen-Literale ("{{0.42, 1.67}}")
+  # kollidieren mit Jinja2s eigener {{ }}-Syntax. kb_layout wird deshalb
+  # separat per lineinfile gesetzt statt ueber eine Variable im Template.
+  ansible.builtin.copy:
+    src: general.lua
+    dest: "/home/{{ restore_user }}/.config/hypr/hyprland/general.lua"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0644"
+
+- name: Tastaturlayout setzen
+  ansible.builtin.lineinfile:
+    path: "/home/{{ restore_user }}/.config/hypr/hyprland/general.lua"
+    regexp: '^(\s*)kb_layout = ".*",'
+    line: '\1kb_layout = "{{ hypr_kb_layout }}",'
+    backrefs: true

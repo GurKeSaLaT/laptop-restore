@@ -1,0 +1,32 @@
+---
+# Stufe 1: läuft gegen /mnt (siehe inventory/chroot.ini), nachdem
+# scripts/00-disk-and-base-install.sh Partitionierung/ZFS/pacstrap erledigt hat.
+- name: Restore laptop configuration
+  hosts: restore
+  gather_facts: true
+  # group_vars/all/vars.yml + vault.yml werden von Ansible automatisch
+  # geladen (jeder Host ist implizit Mitglied der Gruppe "all") - kein
+  # explizites vars_files noetig.
+  roles:
+    - role: base_system
+      tags: [base_system]
+    - role: packages
+      tags: [packages]
+    - role: zfsbootmenu
+      tags: [zfsbootmenu]
+    - role: boot_environments
+      tags: [boot_environments]
+    - role: dotfiles
+      tags: [dotfiles]
+    - role: hyprland
+      tags: [hyprland]
+    - role: user_config
+      tags: [user_config]
+    - role: networkmanager
+      tags: [networkmanager]
+    - role: ssh
+      tags: [ssh]
+    - role: ssh_client
+      tags: [ssh_client]
+    - role: vpn_killswitch
+      tags: [vpn_killswitch]

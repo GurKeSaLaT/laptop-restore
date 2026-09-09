@@ -1,0 +1,7 @@
+#!/bin/bash
+# NetworkManager dispatcher hook: re-evaluate the VPN kill-switch state.
+case "$2" in
+    up|down|vpn-up|vpn-down|dhcp4-change|connectivity-change)
+        /usr/local/sbin/vpn-killswitch-apply
+        ;;
+esac

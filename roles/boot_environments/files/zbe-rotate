@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Usage: zbe-rotate <prefix>
+#
+# Liefert auf stdout den Namen des Boot-Environments, das als Rollback-Punkt
+# fuer diesen Lauf verwendet werden soll.
+#
+# Logik: gibt es unter dem angegebenen Prefix (z.B. "manual", "dotfiles")
+# bereits ein BE, das in den letzten 24h angelegt wurde, wird das aelteste
+# davon weiterverwendet (unveraendert) und alle juengeren BEs desselben
+# Prefixes werden inkl. ihres Origin-Snapshots geloescht. Gibt es keins,
+# wird ein neues BE angelegt.
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+    echo "zbe-rotate muss mit sudo laufen" >&2
+    exit 1
+fi
+
+prefix="${1:?Usage: zbe-rotate <prefix>}"
+pool_root="mappepool/ROOT"
+cutoff=$(( $(date +%s) - 86400 ))
+
+mapfile -t recent_bes < <(
+    zfs list -H -p -o creation,name -t filesystem -r "$pool_root" \
+        | awk -F'\t' -v pfx="${pool_root}/${prefix}-" -v cutoff="$cutoff" \
+              '$2 ~ "^"pfx && $1 >= cutoff { print }' \
+        | sort -n \
+        | cut -f2 \
+        | sed "s#^${pool_root}/##"
+)
+
+if [[ ${#recent_bes[@]} -gt 0 ]]; then
+    bename="${recent_bes[0]}"
+    echo "Boot-Environment der letzten 24h gefunden, wird beibehalten: $bename" >&2
+    if [[ ${#recent_bes[@]} -gt 1 ]]; then
+        for be in "${recent_bes[@]:1}"; do
+            origin="$(zfs list -H -o origin "${pool_root}/${be}")"
+            echo "Entferne Zwischen-Boot-Environment: $be" >&2
+            zfs destroy "${pool_root}/${be}"
+            if [[ -n "$origin" && "$origin" != "-" ]]; then
+                zfs destroy "$origin" || true
+            fi
+        done
+    fi
+else
+    bename="${prefix}-$(date +'%Y%m%dT%H%M%S')"
+    echo "Lege Boot-Environment an: $bename" >&2
+    zectl create "$bename" >&2
+fi
+
+echo "$bename"

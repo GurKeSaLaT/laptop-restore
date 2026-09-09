@@ -1,0 +1,9 @@
+Host github.com
+    IdentityFile ~/.ssh/github
+    IdentitiesOnly yes
+
+{{ vault_ssh_client_config_extra }}
+# Lazy-load: passphrase wird erst beim ersten tatsächlichen Verbindungsaufbau
+# abgefragt, der entschlüsselte Key wird danach automatisch im Agent gecacht.
+Host *
+    AddKeysToAgent yes

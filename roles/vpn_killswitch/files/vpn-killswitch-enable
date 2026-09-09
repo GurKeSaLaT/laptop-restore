@@ -1,0 +1,11 @@
+#!/bin/bash
+# Re-arms the VPN kill-switch after a manual override.
+set -e
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Bitte mit sudo ausfuehren." >&2
+    exit 1
+fi
+rm -f /run/vpn-killswitch-override /run/vpn-killswitch-state
+logger -t vpn-killswitch "manual override disabled, kill-switch re-armed"
+/usr/local/sbin/vpn-killswitch-apply
+echo "Kill-Switch wieder aktiv."

@@ -1,0 +1,15 @@
+[Unit]
+Description=VPN kill-switch fail-closed baseline (before network comes up)
+DefaultDependencies=no
+Before=network-pre.target
+Wants=network-pre.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/rm -f /run/vpn-killswitch-state
+ExecStart=/usr/bin/nft -f /etc/vpnks-boot.nft
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

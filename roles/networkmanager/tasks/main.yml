@@ -1,0 +1,20 @@
+---
+- name: NetworkManager soll tun0 nicht selbst verwalten (verhindert Doppel-Management von DNS/Routen)
+  ansible.builtin.copy:
+    src: 99-unmanaged-tun.conf
+    dest: /etc/NetworkManager/conf.d/99-unmanaged-tun.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Bekannte WLANs aus vault.yml anlegen
+  community.general.nmcli:
+    type: wifi
+    conn_name: "{{ item.ssid }}"
+    ssid: "{{ item.ssid }}"
+    wifi_sec: "{{ 'wpa-psk' if item.psk | default('') | length > 0 else omit }}"
+    psk: "{{ item.psk if item.psk | default('') | length > 0 else omit }}"
+    autoconnect: true
+    state: present
+  loop: "{{ vault_wifi_networks | default([]) }}"
+  no_log: true

@@ -1,0 +1,89 @@
+---
+# Erhoben auf dem Referenzsystem am 2026-09-09 via:
+#   pacman -Qqe   (explizit installiert)
+#   pacman -Qqm   (foreign/AUR - nicht in offiziellen Repos)
+# pacman_packages = explizit MINUS foreign. aur_packages = foreign
+# (ohne paru/paru-debug, die per Bootstrap-Task separat gebaut werden).
+
+pacman_packages:
+  - aircrack-ng
+  - docker
+  - dosfstools
+  - efibootmgr
+  - firefox
+  - git
+  - hashcat
+  - hcxdumptool
+  - hcxtools
+  - intel-ucode
+  - less
+  - lib32-vulkan-intel
+  - linux-firmware
+  - "{{ kernel_pkg }}"
+  - "{{ kernel_headers_pkg }}"
+  - man-db
+  - man-pages
+  - mtools
+  - networkmanager-openvpn
+  - plasma-browser-integration
+  - rpi-imager
+  - rust
+  - steam
+  - strace
+  - tree
+  - unzip
+  - vim
+  - vulkan-intel
+  - wavemon
+  - wireshark-qt
+  - zip
+
+# Reihenfolge bewusst so belassen, wie auf dem Referenzsystem vorgefunden.
+aur_packages:
+  - adw-gtk-theme-git
+  - breeze-plus
+  - darkly-bin
+  - etcher-bin
+  - html2markdown
+  - html2markdown-debug
+  - illogical-impulse-audio
+  - illogical-impulse-backlight
+  - illogical-impulse-basic
+  - illogical-impulse-bibata-modern-classic-bin
+  - illogical-impulse-fonts-themes
+  - illogical-impulse-hyprland
+  - illogical-impulse-kde
+  - illogical-impulse-microtex-git
+  - illogical-impulse-microtex-git-debug
+  - illogical-impulse-portal
+  - illogical-impulse-python
+  - illogical-impulse-quickshell-git
+  - illogical-impulse-screencapture
+  - illogical-impulse-toolkit
+  - illogical-impulse-widgets
+  - kirigami2
+  - litehtml0.9
+  - nm-sidebar
+  - otf-space-grotesk
+  - python-pkg_resources
+  - qt6-avif-image-plugin
+  - ttf-material-symbols-variable-git
+  - ttf-readex-pro
+  - ttf-rubik-vf
+  - ttf-twemoji
+  - vpnfailsafe-git
+  - wlogout
+  - yay-bin
+  - yay-bin-debug
+  - zectl
+  - zectl-pacman-hook
+  # Nicht aus offiziellen Repos installierbar (siehe scripts/00-disk-and-base-install.sh) -
+  # werden hier via AUR/dkms gebaut, brauchen nur base-devel + linux-lts-headers (schon pacstrap-t).
+  - zfs-dkms
+  - zfs-utils
+  # Fuer roles/zfsbootmenu (generate-zbm) - auf dem Referenzsystem aktuell
+  # NICHT installiert (nur die fertigen EFI-Images liegen noch da), aber
+  # noetig, um sie hier neu zu erzeugen.
+  - zfsbootmenu
+
+fish_package: fish

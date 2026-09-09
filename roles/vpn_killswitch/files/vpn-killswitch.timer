@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic VPN kill-switch check
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=20s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

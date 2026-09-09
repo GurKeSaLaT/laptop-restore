@@ -1,0 +1,96 @@
+---
+- name: Hostname setzen
+  ansible.builtin.copy:
+    dest: /etc/hostname
+    content: "{{ system_hostname }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: /etc/hosts
+  ansible.builtin.copy:
+    dest: /etc/hosts
+    content: |
+      127.0.0.1   localhost
+      ::1         localhost
+      127.0.1.1   {{ system_hostname }}.localdomain {{ system_hostname }}
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Zeitzone setzen
+  ansible.builtin.file:
+    src: "/usr/share/zoneinfo/{{ system_timezone }}"
+    dest: /etc/localtime
+    state: link
+    force: true
+
+- name: Hardware-Uhr synchronisieren
+  ansible.builtin.command: hwclock --systohc
+  changed_when: false
+  failed_when: false
+
+- name: locale.gen - {{ system_locale }} aktivieren
+  ansible.builtin.lineinfile:
+    path: /etc/locale.gen
+    regexp: "^#?{{ system_locale | regex_escape }} UTF-8"
+    line: "{{ system_locale }} UTF-8"
+
+- name: locale-gen ausfuehren
+  ansible.builtin.command: locale-gen
+  register: _locale_gen
+  changed_when: "'done' in _locale_gen.stdout or _locale_gen.rc == 0"
+
+- name: /etc/locale.conf
+  ansible.builtin.copy:
+    dest: /etc/locale.conf
+    content: "LANG={{ system_locale }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: /etc/vconsole.conf (Konsolen-Keymap)
+  ansible.builtin.copy:
+    dest: /etc/vconsole.conf
+    content: "KEYMAP={{ console_keymap }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Benutzer {{ restore_user }} anlegen
+  ansible.builtin.user:
+    name: "{{ restore_user }}"
+    uid: "{{ restore_user_uid }}"
+    groups: "{{ restore_user_groups }}"
+    append: true
+    shell: /bin/bash
+    create_home: true
+    password: "{{ vault_user_password_hash | default(omit) }}"
+
+- name: Root-Passwort setzen (falls in vault.yml hinterlegt)
+  ansible.builtin.user:
+    name: root
+    password: "{{ vault_root_password_hash }}"
+  when: vault_root_password_hash is defined and vault_root_password_hash | length > 0
+
+- name: wheel darf sudo (Passwort erforderlich, kein NOPASSWD)
+  ansible.builtin.lineinfile:
+    path: /etc/sudoers
+    regexp: "^#?\\s*%wheel ALL=\\(ALL:ALL\\) ALL"
+    line: "%wheel ALL=(ALL:ALL) ALL"
+    validate: "visudo -cf %s"
+
+- name: Systemdienste aktivieren
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+  loop:
+    - zfs-import-cache.service
+    - zfs-mount.service
+    - zfs-import.target
+    - zfs.target
+    - zfs-zed.service
+    - NetworkManager.service
+    - NetworkManager-dispatcher.service
+    - NetworkManager-wait-online.service
+    - bluetooth.service

@@ -1,0 +1,123 @@
+---
+- name: /etc/openvpn/client anlegen (ProtectHome=true im Service - Zugangsdaten duerfen nicht unter /home liegen)
+  ansible.builtin.file:
+    path: /etc/openvpn/client
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: OpenVPN-Client-Config deployen
+  ansible.builtin.template:
+    src: normal-1194-udp.conf.j2
+    dest: "/etc/openvpn/client/{{ vpn_connection_name }}.conf"
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: OpenVPN-Zugangsdaten deployen
+  ansible.builtin.template:
+    src: normal-1194-udp.auth.j2
+    dest: "/etc/openvpn/client/{{ vpn_connection_name }}.auth"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: up/down-Hooks deployen
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/openvpn/client/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - vpnks-up.sh
+    - vpnks-down.sh
+
+- name: vpn-killswitch-apply deployen (Template - enthaelt vault_vpn_server_host)
+  ansible.builtin.template:
+    src: vpn-killswitch-apply.j2
+    dest: /usr/local/sbin/vpn-killswitch-apply
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Weitere Kill-Switch-Skripte nach /usr/local/sbin deployen
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/usr/local/sbin/{{ item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - vpn-killswitch-enable
+    - vpn-killswitch-disable
+    - vpn-killswitch-resume-worker
+
+- name: systemd-sleep Resume-Hook deployen (MUSS unter /usr/lib liegen, nicht /etc)
+  ansible.builtin.copy:
+    src: vpn-killswitch-resume
+    dest: /usr/lib/systemd/system-sleep/vpn-killswitch-resume
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Kill-Switch systemd-Units deployen
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - vpn-killswitch-boot.service
+    - vpn-killswitch.service
+    - vpn-killswitch.timer
+  notify: systemd daemon-reload
+
+- name: Drop-in-Verzeichnis fuer openvpn-client@{{ vpn_connection_name }} anlegen
+  ansible.builtin.file:
+    path: "/etc/systemd/system/openvpn-client@{{ vpn_connection_name }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: openvpn-client Restart/Capabilities-Override deployen
+  ansible.builtin.copy:
+    src: openvpn-override.conf
+    dest: "/etc/systemd/system/openvpn-client@{{ vpn_connection_name }}.service.d/override.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: systemd daemon-reload
+
+- name: Boot-Fail-Safe nftables-Baseline deployen
+  ansible.builtin.copy:
+    src: vpnks-boot.nft
+    dest: /etc/vpnks-boot.nft
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: NetworkManager-Dispatcher-Hook deployen
+  ansible.builtin.copy:
+    src: 90-vpn-killswitch
+    dest: /etc/NetworkManager/dispatcher.d/90-vpn-killswitch
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Kill-Switch-Boot-Service + Timer aktivieren
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+  loop:
+    - vpn-killswitch-boot.service
+    - vpn-killswitch.timer
+
+- name: openvpn-client-Service NICHT dauerhaft aktivieren (Start/Stop macht der Kill-Switch)
+  ansible.builtin.systemd_service:
+    name: "openvpn-client@{{ vpn_connection_name }}.service"
+    enabled: false

@@ -1,0 +1,12 @@
+---
+# Deployed alles unter roles/user_config/files/ 1:1 nach /home/{{ restore_user }}/,
+# gleiche relative Struktur (siehe scripts/capture-config.sh). Leer, bis
+# das erste Mal etwas erfasst wurde - dann einfach eine wachsende Menge
+# an $HOME-Dateien, ohne dass diese Rolle selbst angepasst werden muss.
+- name: Erfasste $HOME-Configs deployen
+  ansible.builtin.copy:
+    src: files/
+    dest: "/home/{{ restore_user }}/"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+  when: lookup('fileglob', role_path + '/files/**', wantlist=True) | length > 0

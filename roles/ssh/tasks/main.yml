@@ -1,0 +1,40 @@
+---
+- name: openssh installieren
+  community.general.pacman:
+    name: openssh
+    state: present
+
+- name: Nur Public-Key-Auth erlauben, Passwort-Login sperren
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  loop:
+    - { regexp: "^#?PubkeyAuthentication",       line: "PubkeyAuthentication yes" }
+    - { regexp: "^#?PasswordAuthentication",      line: "PasswordAuthentication no" }
+    - { regexp: "^#?KbdInteractiveAuthentication", line: "KbdInteractiveAuthentication no" }
+    - { regexp: "^#?ChallengeResponseAuthentication", line: "ChallengeResponseAuthentication no" }
+    - { regexp: "^#?PermitRootLogin",              line: "PermitRootLogin no" }
+    - { regexp: "^#?PermitEmptyPasswords",         line: "PermitEmptyPasswords no" }
+  notify: systemd daemon-reload (ssh)
+
+- name: ~/.ssh fuer {{ restore_user }} anlegen
+  ansible.builtin.file:
+    path: "/home/{{ restore_user }}/.ssh"
+    state: directory
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0700"
+
+- name: authorized_keys deployen (nur diese Keys duerfen sich einloggen)
+  ansible.builtin.copy:
+    dest: "/home/{{ restore_user }}/.ssh/authorized_keys"
+    content: "{{ ssh_authorized_keys | join('\n') }}\n"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0600"
+
+- name: sshd aktivieren
+  ansible.builtin.systemd_service:
+    name: sshd.service
+    enabled: true

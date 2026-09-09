@@ -1,0 +1,17 @@
+#!/bin/bash
+# Eigenstaendiges Skript (nicht der Hook selbst!): wartet auf ein funktionierendes
+# physisches Default-Interface (bis zu 20s) und erzwingt dann einen VPN-Neustart.
+# Wird vom system-sleep-Hook per "systemd-run" als eigene, unabhaengige Unit gestartet,
+# damit es nicht mitgeloescht wird, wenn der Hook selbst fertig ist.
+
+phys=""
+for i in $(seq 1 20); do
+    phys=$(ip -4 route show default 2>/dev/null | awk '{
+        for (i=1;i<=NF;i++) if ($i=="dev" && $(i+1)!="tun0") { print $(i+1); exit }
+    }')
+    [ -n "$phys" ] && break
+    sleep 1
+done
+
+logger -t vpn-killswitch "Resume erkannt (phys=${phys:-keins nach 20s}), erzwinge VPN-Neuverbindung"
+systemctl restart openvpn-client@normal-1194-udp.service

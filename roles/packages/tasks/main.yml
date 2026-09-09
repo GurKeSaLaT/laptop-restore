@@ -1,0 +1,54 @@
+---
+- name: Paketdatenbank aktualisieren
+  community.general.pacman:
+    update_cache: true
+
+- name: Pakete aus offiziellen Repos installieren
+  community.general.pacman:
+    name: "{{ pacman_packages + [fish_package] }}"
+    state: present
+
+- name: Temporaeres NOPASSWD fuer AUR-Builds (wird am Ende wieder entfernt)
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/99-ansible-aur-build
+    content: "{{ restore_user }} ALL=(ALL) NOPASSWD: ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Pruefen ob paru schon gebaut ist
+  ansible.builtin.stat:
+    path: /usr/bin/paru
+  register: _paru_bin
+
+- name: paru aus AUR bauen (Bootstrap, sonst kein AUR-Helper verfuegbar)
+  when: not _paru_bin.stat.exists
+  block:
+    - name: AUR-Quelle von paru klonen
+      become: true
+      become_user: "{{ restore_user }}"
+      ansible.builtin.git:
+        repo: https://aur.archlinux.org/paru.git
+        dest: "/home/{{ restore_user }}/.cache/aur-build/paru"
+
+    - name: paru bauen und installieren
+      become: true
+      become_user: "{{ restore_user }}"
+      ansible.builtin.command:
+        cmd: makepkg -si --noconfirm --needed
+        chdir: "/home/{{ restore_user }}/.cache/aur-build/paru"
+        creates: /usr/bin/paru
+
+- name: AUR-Pakete via paru installieren
+  become: true
+  become_user: "{{ restore_user }}"
+  ansible.builtin.command:
+    cmd: "paru -S --noconfirm --needed {{ aur_packages | join(' ') }}"
+  register: _paru_install
+  changed_when: "'there is nothing to do' not in _paru_install.stdout | lower"
+
+- name: Temporaeres AUR-Build-NOPASSWD wieder entfernen
+  ansible.builtin.file:
+    path: /etc/sudoers.d/99-ansible-aur-build
+    state: absent

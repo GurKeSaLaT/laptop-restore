@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Update end-4/dots-hyprland (illogical-impulse) mit ZFS-Rollback-Absicherung.
+set -euo pipefail
+
+bename="$(sudo zbe-rotate dotfiles)"
+
+cd ~/.cache/dots-hyprland
+
+git stash
+git pull
+./setup install
+
+echo
+echo "Update fertig. Rollback-Punkt: '$bename'"
+echo "Falls etwas nicht funktioniert: im ZFSBootMenu-Menü '$bename' auswählen."

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+    echo "Bitte mit sudo ausführen: sudo safe-update" >&2
+    exit 1
+fi
+
+bename="$(zbe-rotate manual)"
+
+echo "Starte pacman -Syu"
+pacman -Syu
+
+echo
+echo "Update fertig. Rollback-Punkt: '$bename'"
+echo "Falls etwas nicht bootet: im ZFSBootMenu-Menü '$bename' auswählen."

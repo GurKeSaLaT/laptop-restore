@@ -1,0 +1,72 @@
+---
+- name: hostid aus zbm_kernel_cmdline extrahieren
+  ansible.builtin.set_fact:
+    _hostid_hex: "{{ zbm_kernel_cmdline | regex_search('spl_hostid=0x([0-9a-fA-F]+)', '\\1') | first }}"
+
+- name: /etc/hostid setzen (konsistent mit org.zfsbootmenu:commandline)
+  ansible.builtin.command:
+    cmd: "zgenhostid -f {{ _hostid_hex }}"
+    creates: /etc/hostid
+
+- name: mkinitcpio HOOKS fuer ZFS-Root konfigurieren
+  ansible.builtin.lineinfile:
+    path: /etc/mkinitcpio.conf
+    regexp: "^HOOKS="
+    line: "HOOKS=(base udev autodetect modconf kms keyboard keymap consolefont block zfs filesystems)"
+    backup: true
+
+- name: initramfs fuer {{ kernel_pkg }} neu bauen
+  ansible.builtin.command: mkinitcpio -P
+  changed_when: true
+
+- name: /etc/zfsbootmenu anlegen
+  ansible.builtin.file:
+    path: /etc/zfsbootmenu
+    state: directory
+    mode: "0755"
+
+- name: ZFSBootMenu config.yaml deployen
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/zfsbootmenu/config.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  register: _zbm_config
+
+- name: org.zfsbootmenu:commandline auf {{ root_dataset }} setzen
+  ansible.builtin.command:
+    cmd: "zfs set org.zfsbootmenu:commandline={{ zbm_kernel_cmdline | quote }} {{ root_dataset }}"
+  changed_when: true
+
+- name: EFI-Images erzeugen (generate-zbm)
+  ansible.builtin.command: generate-zbm
+  changed_when: true
+
+- name: EFI-Fallback-Verzeichnis anlegen
+  ansible.builtin.file:
+    path: /boot/efi/EFI/BOOT
+    state: directory
+    mode: "0755"
+
+- name: Fallback-Kopie fuer verlorenen UEFI-NVRAM-Eintrag (Standard-Fallback-Pfad lt. UEFI-Spec)
+  ansible.builtin.copy:
+    remote_src: true
+    src: /boot/efi/EFI/ZBM/VMLINUZ.EFI
+    dest: /boot/efi/EFI/BOOT/BOOTX64.EFI
+    mode: "0755"
+
+- name: Vorhandene efibootmgr-Eintraege pruefen
+  ansible.builtin.command: efibootmgr
+  register: _efibootmgr
+  changed_when: false
+  failed_when: false
+
+- name: NVRAM-Eintrag "ZFSBootMenu" anlegen, falls nicht vorhanden
+  ansible.builtin.command:
+    cmd: >-
+      efibootmgr --create --disk {{ disk_device }} --part 1
+      --loader '\EFI\ZBM\VMLINUZ.EFI' --label "ZFSBootMenu"
+  when:
+    - _efibootmgr.rc is defined and _efibootmgr.rc == 0
+    - "'ZFSBootMenu' not in _efibootmgr.stdout"

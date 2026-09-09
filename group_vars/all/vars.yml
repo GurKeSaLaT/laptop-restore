@@ -1,0 +1,62 @@
+---
+# Nicht-geheime Variablen. Secrets liegen in vault.yml (verschlüsselt).
+
+# --- Stufe 0 (nur für scripts/00-disk-and-base-install.sh relevant,
+#     Ansible selbst partitioniert nichts) ---
+disk_device: /dev/nvme0n1
+efi_partition: "{{ disk_device }}p1"
+zfs_partition: "{{ disk_device }}p2"
+
+# --- ZFS / Boot ---
+zpool_name: mappepool
+root_dataset: "{{ zpool_name }}/ROOT/arch0"
+home_dataset: "{{ zpool_name }}/home"
+# Tatsächlicher Wert von: zfs get org.zfsbootmenu:commandline mappepool/ROOT/arch0
+zbm_kernel_cmdline: "noresume init_on_alloc=0 rw spl.spl_hostid=0x00bab10c mem_sleep_default=deep"
+zbm_prunecount: 3
+
+# --- Basissystem ---
+system_hostname: archlinux
+system_timezone: Europe/Berlin
+system_locale: en_US.UTF-8
+console_keymap: de-latin1
+kernel_pkg: linux-lts
+kernel_headers_pkg: linux-lts-headers
+
+# --- Benutzer ---
+restore_user: gurkesalat
+restore_user_uid: 1000
+restore_user_groups:
+  - wheel
+  - docker
+
+# --- Hyprland ---
+hypr_kb_layout: de
+dotfiles_repo: https://github.com/end-4/dots-hyprland
+dotfiles_dest: "/home/{{ restore_user }}/.cache/dots-hyprland"
+
+# --- SSH ---
+# Nur Public-Key-Auth, kein Passwort-Login (siehe roles/ssh). Der private
+# Schluessel liegt NICHT in diesem Repo - wurde einmalig generiert und dem
+# Nutzer direkt uebergeben. Weitere Geraete: hier einfach eine weitere
+# Zeile mit deren Public Key ergaenzen (Public Keys sind kein Geheimnis).
+ssh_authorized_keys:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM1dZ4C0W9QyWW/fKCR0vU3BXHa9PIO77GtaO+E49iWr gurkesalat@laptop-restore"
+
+# Public-Halbstuecke der Client-Identitaeten (siehe roles/ssh_client).
+# Die privaten Gegenstuecke liegen in vault.yml (vault_ssh_client_keys),
+# jeweils unter demselben Key-Namen.
+ssh_client_public_keys:
+  github: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFzoyNAC/e6Hf22zuPymGuNI1Q7Algr84q46cStTlqQT {{ restore_user }}@laptop-restore"
+  home_server: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPpYOKYMCQ5HMyWPdAbGu0qBmXmJjFsTeSBYS74JX4Yo {{ restore_user }}@home-server"
+  firewall: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDNv/bV3mtrIy0Gsy/q/udPCzq74LPlxgWMc4WSYGZET {{ restore_user }}@firewall"
+  wifi_pi: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFy8ArumUv2+XOZHYK7w8d8iC/dTF8oikhqTZezJmrEi {{ restore_user }}@wifi-pi"
+
+# --- VPN ---
+# vpn_server_host liegt in vault.yml (vault_vpn_server_host) - verraet
+# die private Domain, port/verbindungsname/check-host sind generisch/
+# oeffentlich (1194 ist OpenVPN-Standardport, ping.archlinux.org ein
+# oeffentlicher Arch-Dienst) und deshalb unkritisch hier.
+vpn_connection_name: normal-1194-udp
+vpn_server_port: 1194
+vpn_nm_check_host: ping.archlinux.org

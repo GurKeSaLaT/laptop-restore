@@ -1,0 +1,30 @@
+---
+- name: end-4/dots-hyprland klonen
+  become: true
+  become_user: "{{ restore_user }}"
+  ansible.builtin.git:
+    repo: "{{ dotfiles_repo }}"
+    dest: "{{ dotfiles_dest }}"
+    version: main
+
+# ./setup install ist interaktiv geschrieben (siehe docs/NOT_COVERED.md) -
+# non-interaktiver Best-Effort-Lauf. Genau der Schritt, den update-dotfiles
+# (roles/boot_environments) bei jedem Dotfiles-Update ebenfalls ausfuehrt,
+# also grundsaetzlich ein bekannt funktionierender, wiederholbarer Vorgang.
+- name: dots-hyprland Setup ausfuehren (./setup install)
+  become: true
+  become_user: "{{ restore_user }}"
+  ansible.builtin.command:
+    cmd: ./setup install
+    chdir: "{{ dotfiles_dest }}"
+  changed_when: true
+  register: _dotfiles_setup
+  failed_when: false
+
+- name: Warnung falls ./setup install fehlschlug
+  ansible.builtin.debug:
+    msg: >-
+      ./setup install ist mit Exit {{ _dotfiles_setup.rc }} fehlgeschlagen -
+      vermutlich, weil es interaktiv nachfragt. Manuell nachholen:
+      su - {{ restore_user }} -c 'cd {{ dotfiles_dest }} && ./setup install'
+  when: _dotfiles_setup.rc is defined and _dotfiles_setup.rc != 0

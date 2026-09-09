@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Verweigert den Commit, wenn group_vars/all/vault.yml unverschlüsselt
+# (oder gar nicht vorhanden, aber ein anderes vault*.yml unverschlüsselt)
+# eingecheckt würde. Einrichten: git config core.hooksPath scripts/git-hooks
+set -euo pipefail
+
+fail=0
+
+while IFS= read -r -d '' file; do
+    # Nur Dateien pruefen, die "vault" im Namen tragen (Konvention dieses Repos)
+    case "$file" in
+        *vault*.yml|*vault*.yaml)
+            content="$(git show ":$file" 2>/dev/null || true)"
+            if [[ -n "$content" ]] && [[ "$content" != \$ANSIBLE_VAULT* ]]; then
+                echo "FEHLER: '$file' ist staged, aber NICHT ansible-vault-verschluesselt." >&2
+                echo "        Nie Klartext-Secrets committen! Erst verschluesseln:" >&2
+                echo "        ansible-vault encrypt $file" >&2
+                fail=1
+            fi
+            ;;
+    esac
+done < <(git diff --cached --name-only --diff-filter=ACM -z)
+
+exit "$fail"

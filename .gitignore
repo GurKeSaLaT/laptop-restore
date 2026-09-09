@@ -1,0 +1,15 @@
+# Niemals das Vault-Passwort selbst committen
+.vault_pass
+.vault_pass.txt
+*.vault-password
+
+# Ansible/Python Laufzeit-Kram
+*.retry
+__pycache__/
+*.pyc
+.ansible/
+
+# Lokale Testartefakte
+*.qcow2
+*.img
+/mnt/

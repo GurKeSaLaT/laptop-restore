@@ -1,0 +1,9 @@
+flush ruleset
+table inet vpnks {
+    chain output {
+        type filter hook output priority 0; policy drop;
+        oifname "lo" accept
+        ct state established,related accept
+        udp sport 68 udp dport 67 accept
+    }
+}

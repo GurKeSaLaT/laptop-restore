@@ -1,0 +1,47 @@
+---
+- name: ~/.ssh fuer {{ restore_user }} sicherstellen
+  ansible.builtin.file:
+    path: "/home/{{ restore_user }}/.ssh"
+    state: directory
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0700"
+
+- name: SSH-Client-Config deployen (Template - Hostnamen/IPs kommen aus dem Vault)
+  ansible.builtin.template:
+    src: config.j2
+    dest: "/home/{{ restore_user }}/.ssh/config"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0600"
+
+- name: known_hosts deployen (Host-Keys sind kein Geheimnis, aber Hostnamen/IPs schon)
+  ansible.builtin.template:
+    src: known_hosts.j2
+    dest: "/home/{{ restore_user }}/.ssh/known_hosts"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0600"
+
+- name: Private Schluessel deployen (aus vault_ssh_client_keys)
+  ansible.builtin.copy:
+    content: "{{ item.value }}"
+    dest: "/home/{{ restore_user }}/.ssh/{{ item.key }}"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0600"
+  loop: "{{ vault_ssh_client_keys | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  no_log: true
+
+- name: Oeffentliche Schluessel deployen (kein Geheimnis)
+  ansible.builtin.copy:
+    content: "{{ item.value }}\n"
+    dest: "/home/{{ restore_user }}/.ssh/{{ item.key }}.pub"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0644"
+  loop: "{{ ssh_client_public_keys | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"

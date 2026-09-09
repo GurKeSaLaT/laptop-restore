@@ -1,0 +1,81 @@
+# Vorlage für group_vars/all/vault.yml — diese Datei selbst enthält KEINE
+# echten Geheimnisse und ist deshalb unverschlüsselt im Repo.
+#
+# Einrichtung (einmalig):
+#   cp group_vars/all/vault.yml.example group_vars/all/vault.yml
+#   vim group_vars/all/vault.yml              # echte Werte eintragen
+#   ansible-vault encrypt group_vars/all/vault.yml
+#   git add group_vars/all/vault.yml
+#   git commit -m "Add encrypted secrets"
+#
+# Der Pre-Commit-Hook (scripts/git-hooks/pre-commit) verweigert den Commit,
+# falls die Datei aus Versehen unverschlüsselt bliebe.
+#
+# Details zum Vault-Passwort selbst: docs/SECRETS.md
+
+vault_vpn_username: "CHANGE-ME"
+vault_vpn_password: "CHANGE-ME"
+
+# Hostname/Domain des eigenen VPN-Servers - verwendet von
+# roles/vpn_killswitch/templates/vpn-killswitch-apply.j2 (Heimnetz-Erkennung)
+# und taucht normalerweise auch in vault_vpn_client_conf auf (remote-Zeile).
+vault_vpn_server_host: "CHANGE-ME.example.com"
+
+# Vollstaendiger Inhalt von /etc/openvpn/client/normal-1194-udp.conf
+# (inkl. auth-user-pass/script-security/up/down - die Original-Datei
+# referenziert schon exakt die Pfade, die roles/vpn_killswitch deployed,
+# wird also 1:1 durchgereicht, nichts wird automatisch angehaengt).
+# Enthaelt eingebettete CA-Zertifikate/Client-Cert/Key/tls-auth-Key,
+# deshalb ins Vault statt als Klartextdatei.
+vault_vpn_client_conf: |
+  # CHANGE-ME: sudo cat /etc/openvpn/client/normal-1194-udp.conf hier einfuegen.
+  # client
+  # dev tun
+  # proto udp
+  # remote CHANGE-ME.example.com 1194
+  # ...
+  # <ca> ... </ca>
+  # <cert> ... </cert>
+  # <key> ... </key>
+  # <tls-auth> ... </tls-auth>
+
+# Zusaetzliche Host-Bloecke fuer ~/.ssh/config (roles/ssh_client) -
+# alles, was einen privaten/internen Hostnamen oder eine private IP
+# enthaelt, gehoert hierher statt in eine files/-Datei im Klartext.
+# github.com ist bereits fest in roles/ssh_client/templates/config.j2
+# (oeffentlich, kein Geheimnis).
+vault_ssh_client_config_extra: |
+  # CHANGE-ME, z.B.:
+  # Host myserver
+  #     HostName myserver.example.com
+  #     User root
+  #     IdentityFile ~/.ssh/myserver
+  #     IdentitiesOnly yes
+
+# Zugehoerige Host-Public-Keys fuer ~/.ssh/known_hosts - Format wie in
+# known_hosts selbst ("<host-oder-ip> <typ> <key>"), eine Zeile pro Key.
+# Nicht geheim im kryptografischen Sinn, aber verrraet Hostnamen/IPs.
+vault_ssh_known_hosts_extra: |
+  # CHANGE-ME, z.B.:
+  # myserver.example.com ssh-ed25519 AAAA...
+
+# Private SSH-Client-Schluessel (siehe roles/ssh_client). Key-Namen muessen
+# zu group_vars/all/vars.yml -> ssh_client_public_keys passen (dort liegen
+# die zugehoerigen oeffentlichen Haelften, kein Geheimnis).
+vault_ssh_client_keys:
+  github: |
+    # CHANGE-ME: Inhalt von ~/.ssh/github (OPENSSH PRIVATE KEY) hier einfuegen.
+  home_server: |
+    # CHANGE-ME: Inhalt von ~/.ssh/home_server hier einfuegen.
+  firewall: |
+    # CHANGE-ME: Inhalt von ~/.ssh/firewall hier einfuegen.
+  wifi_pi: |
+    # CHANGE-ME: Inhalt von ~/.ssh/wifi_pi hier einfuegen.
+
+# WLAN-Netzwerke, die NetworkManager nach dem Restore automatisch kennen
+# soll. Nur das eigene Heimnetz wird automatisch angelegt - Gast-/Hotel-
+# WLANs mit Captive Portal bewusst NICHT, die wechseln ohnehin staendig
+# und werden unterwegs manuell verbunden.
+vault_wifi_networks:
+  - ssid: "CHANGE-ME"
+    psk: "CHANGE-ME"
