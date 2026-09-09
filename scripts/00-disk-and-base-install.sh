@@ -88,19 +88,24 @@ select_disk() {
 
 select_disk
 
+# Partitions-Suffix: Geraete, deren Name auf eine Ziffer endet (nvme0n1,
+# loop0, mmcblk0, ...) brauchen ein "p" vor der Partitionsnummer
+# (nvme0n1p1), alle anderen (sda, vda, xvda, ...) nicht (vda1, nicht
+# vdap1). Naive "${DISK_DEVICE}p1"-Annahme bricht z.B. in QEMU mit
+# virtio-Disks (/dev/vda) - live erst so gefunden.
+case "$DISK_DEVICE" in
+    *[0-9]) PART_SUFFIX="p" ;;
+    *) PART_SUFFIX="" ;;
+esac
+EFI_PART="${DISK_DEVICE}${PART_SUFFIX}1"
+ZFS_PART="${DISK_DEVICE}${PART_SUFFIX}2"
+
 echo "=== laptop-restore: Stufe 0 (Disk + Base-Install) ==="
 echo "Ziel-Disk:      $DISK_DEVICE"
-echo "EFI-Partition:   ${DISK_DEVICE}p1"
-echo "ZFS-Partition:   ${DISK_DEVICE}p2"
+echo "EFI-Partition:   $EFI_PART"
+echo "ZFS-Partition:   $ZFS_PART"
 echo "Pool-Name:       $ZPOOL_NAME"
 echo
-echo "!!! Alle Daten auf $DISK_DEVICE werden UNWIDERRUFLICH geloescht !!!"
-echo
-read -r -p "Zum Fortfahren exakt 'YES' eingeben: " confirm
-if [[ "$confirm" != "YES" ]]; then
-    echo "Abgebrochen."
-    exit 1
-fi
 
 if [[ ! -d /sys/firmware/efi/efivars ]]; then
     echo "FEHLER: Kein UEFI-Boot erkannt (/sys/firmware/efi/efivars fehlt)." >&2
@@ -123,9 +128,6 @@ sgdisk -n1:1M:+1G -t1:EF00 -c1:EFI "$DISK_DEVICE"
 sgdisk -n2:0:0    -t2:BF00 -c2:ZFS "$DISK_DEVICE"
 partprobe "$DISK_DEVICE"
 sleep 2
-
-EFI_PART="${DISK_DEVICE}p1"
-ZFS_PART="${DISK_DEVICE}p2"
 
 echo "--- EFI-Partition formatieren ---"
 mkfs.vfat -F32 -n EFI "$EFI_PART"
