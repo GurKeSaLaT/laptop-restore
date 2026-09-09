@@ -46,17 +46,22 @@ select_disk() {
     fi
 
     local -a names sizes labels
-    local name size model tran rm
-    while IFS=$'\t' read -r name size model tran rm; do
-        [[ -n "$boot_disk" && "$name" == "$boot_disk" ]] && continue
-        [[ "$name" =~ ^/dev/(loop|sr|zram) ]] && continue
-        names+=("$name")
-        sizes+=("$size")
-        local extra="${model:-unbekanntes Modell}"
-        [[ -n "$tran" ]] && extra="$extra, $tran"
-        [[ "$rm" == "1" ]] && extra="$extra, WECHSELDATENTRAEGER"
+    local line NAME SIZE MODEL TRAN RM
+    # -P (Key="Value"-Paare) statt --separator: robust auch bei Leerzeichen
+    # in MODEL, und --separator fehlt auf manchen (aelteren) util-linux-
+    # Versionen (z.B. auf manchen Live-ISOs beobachtet).
+    while IFS= read -r line; do
+        NAME="" SIZE="" MODEL="" TRAN="" RM=""
+        eval "$line"
+        [[ -n "$boot_disk" && "$NAME" == "$boot_disk" ]] && continue
+        [[ "$NAME" =~ ^/dev/(loop|sr|zram) ]] && continue
+        names+=("$NAME")
+        sizes+=("$SIZE")
+        local extra="${MODEL:-unbekanntes Modell}"
+        [[ -n "$TRAN" ]] && extra="$extra, $TRAN"
+        [[ "$RM" == "1" ]] && extra="$extra, WECHSELDATENTRAEGER"
         labels+=("$extra")
-    done < <(lsblk -dpno NAME,SIZE,MODEL,TRAN,RM --separator $'\t')
+    done < <(lsblk -dPp -o NAME,SIZE,MODEL,TRAN,RM)
 
     if [[ ${#names[@]} -eq 0 ]]; then
         echo "FEHLER: Kein passendes Zielgeraet gefunden (lsblk lieferte nichts Brauchbares)." >&2
