@@ -6,7 +6,13 @@
 # mit geladenem zfs-Kernelmodul (siehe README.md, Abschnitt "Warum keine
 # reine Alpine-Live-Umgebung?").
 #
-# Aufruf: sudo ./scripts/00-disk-and-base-install.sh
+# Merkt sich in /root/.laptop-restore-state, ob Partitionierung/ZFS-Pool/
+# pacstrap (Stufe 0) schon fertig sind - ein erneuter Aufruf (z.B. nach
+# einem fehlgeschlagenen Ansible-Lauf) ueberspringt diese langsamen,
+# destruktiven Schritte dann und haengt den vorhandenen Pool nur wieder
+# ein. Fuer einen komplett frischen Start trotzdem: --reset.
+#
+# Aufruf: sudo ./scripts/00-disk-and-base-install.sh [--reset] [ansible-playbook-Optionen...]
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -17,6 +23,20 @@ if [[ $EUID -ne 0 ]]; then
     echo "Bitte als root ausfuehren (Live-Umgebung: meist ohnehin root)." >&2
     exit 1
 fi
+
+STATE_FILE="/root/.laptop-restore-state"
+
+# --reset herausfiltern, bevor der Rest von "$@" spaeter an ansible-playbook
+# durchgereicht wird.
+reset_requested=0
+remaining_args=()
+for arg in "$@"; do
+    case "$arg" in
+        --reset) reset_requested=1 ;;
+        *) remaining_args+=("$arg") ;;
+    esac
+done
+set -- "${remaining_args[@]}"
 
 # archiso's Live-Overlay (cowspace) hat oft eine feste, kleine Groesse
 # (z.B. 256M) unabhaengig vom tatsaechlich vorhandenen RAM - live in einer
@@ -48,80 +68,6 @@ fi
 # ansible-galaxy ueberspringt schon installierte Collections von selbst.
 echo "--- Ansible-Collections (community.general, ansible.posix) sicherstellen ---"
 ansible-galaxy collection install -r "$REPO_DIR/requirements.yml"
-
-# Listet alle Laufwerke auf, die als Installationsziel infrage kommen, und
-# laesst interaktiv eins auswaehlen. Schliesst das Medium, von dem gerade
-# gebootet wurde (z.B. der USB-Stick mit der Live-ISO), automatisch aus -
-# archiso mountet das unter /run/archiso/bootmnt, darueber laesst sich das
-# zugrundeliegende Blockgeraet ermitteln.
-select_disk() {
-    local boot_src="" boot_disk=""
-    boot_src="$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)"
-    if [[ -n "$boot_src" ]]; then
-        boot_disk="/dev/$(lsblk -no PKNAME "$boot_src" 2>/dev/null || true)"
-    fi
-
-    local -a names sizes labels
-    local line NAME SIZE MODEL TRAN RM
-    # -P (Key="Value"-Paare) statt --separator: robust auch bei Leerzeichen
-    # in MODEL, und --separator fehlt auf manchen (aelteren) util-linux-
-    # Versionen (z.B. auf manchen Live-ISOs beobachtet).
-    while IFS= read -r line; do
-        NAME="" SIZE="" MODEL="" TRAN="" RM=""
-        eval "$line"
-        [[ -n "$boot_disk" && "$NAME" == "$boot_disk" ]] && continue
-        [[ "$NAME" =~ ^/dev/(loop|sr|zram) ]] && continue
-        names+=("$NAME")
-        sizes+=("$SIZE")
-        local extra="${MODEL:-unbekanntes Modell}"
-        [[ -n "$TRAN" ]] && extra="$extra, $TRAN"
-        [[ "$RM" == "1" ]] && extra="$extra, WECHSELDATENTRAEGER"
-        labels+=("$extra")
-    done < <(lsblk -dPp -o NAME,SIZE,MODEL,TRAN,RM)
-
-    if [[ ${#names[@]} -eq 0 ]]; then
-        echo "FEHLER: Kein passendes Zielgeraet gefunden (lsblk lieferte nichts Brauchbares)." >&2
-        exit 1
-    fi
-
-    echo "Verfuegbare Laufwerke (das Boot-Medium ist bereits ausgeschlossen):" >&2
-    local i
-    for i in "${!names[@]}"; do
-        printf '  [%d] %-14s %8s   %s\n' "$((i + 1))" "${names[$i]}" "${sizes[$i]}" "${labels[$i]}" >&2
-    done
-    echo >&2
-
-    local choice
-    while true; do
-        read -r -p "Nummer des Ziel-Laufwerks eingeben: " choice
-        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#names[@]} )); then
-            DISK_DEVICE="${names[$((choice - 1))]}"
-            return
-        fi
-        echo "Ungueltige Auswahl, bitte Nummer aus der Liste eingeben." >&2
-    done
-}
-
-select_disk
-
-# Partitions-Suffix: Geraete, deren Name auf eine Ziffer endet (nvme0n1,
-# loop0, mmcblk0, ...) brauchen ein "p" vor der Partitionsnummer
-# (nvme0n1p1), alle anderen (sda, vda, xvda, ...) nicht (vda1, nicht
-# vdap1). Naive "${DISK_DEVICE}p1"-Annahme bricht z.B. in QEMU mit
-# virtio-Disks (/dev/vda) - live erst so gefunden.
-case "$DISK_DEVICE" in
-    *[0-9]) PART_SUFFIX="p" ;;
-    *) PART_SUFFIX="" ;;
-esac
-EFI_PART="${DISK_DEVICE}${PART_SUFFIX}1"
-ZFS_PART="${DISK_DEVICE}${PART_SUFFIX}2"
-
-echo "=== laptop-restore: Stufe 0 (Disk + Base-Install) ==="
-echo "Ziel-Disk:      $DISK_DEVICE"
-echo "EFI-Partition:   $EFI_PART"
-echo "ZFS-Partition:   $ZFS_PART"
-echo "Pool-Name:       $ZPOOL_NAME"
-echo
 
 if [[ ! -d /sys/firmware/efi/efivars ]]; then
     echo "FEHLER: Kein UEFI-Boot erkannt (/sys/firmware/efi/efivars fehlt)." >&2
@@ -199,83 +145,209 @@ echo "--- ZFS im Live-System bereit ---"
 
 loadkeys "$CONSOLE_KEYMAP" || true
 
-# Reste eines vorherigen, abgebrochenen Laufs aufraeumen (z.B. falsches
-# Vault-Passwort beim letzten Versuch - das Skript endet dann zwar mit
-# Fehler, haengt aber /mnt/boot/efi und den ZFS-Pool nicht automatisch
-# wieder aus, live beobachtet: "mkfs.vfat: /dev/vdaX contains a mounted
-# filesystem" beim naechsten Versuch). Alles per || true, da es beim
-# allerersten Lauf nichts zum Aufraeumen gibt.
-echo "--- Reste eines vorherigen Laufs aufraeumen (falls vorhanden) ---"
-umount -R /mnt 2>/dev/null || true
-zpool export "$ZPOOL_NAME" 2>/dev/null || true
+# --- Resume-Logik: schon abgeschlossene Stufe 0 aus vorherigem Lauf? ---
+resume=0
+if [[ $reset_requested -eq 1 ]]; then
+    echo "--- --reset: vorherigen Fortschritt verwerfen, komplett neu anfangen ---"
+    rm -f "$STATE_FILE"
+elif [[ -f "$STATE_FILE" ]]; then
+    # shellcheck source=/dev/null
+    source "$STATE_FILE"
+    if [[ "${STAGE0_DONE:-0}" == "1" && -n "${DISK_DEVICE:-}" ]]; then
+        echo "--- Vorherige Stufe 0 gefunden (Ziel-Disk: $DISK_DEVICE) - Partitionierung/pacstrap werden uebersprungen. ---"
+        echo "--- Fuer einen kompletten Neustart: $0 --reset ---"
+        resume=1
+    fi
+fi
 
-echo "--- Partitioniere $DISK_DEVICE ---"
-wipefs -af "$DISK_DEVICE"
-sgdisk --zap-all "$DISK_DEVICE"
-sgdisk -n1:1M:+1G -t1:EF00 -c1:EFI "$DISK_DEVICE"
-sgdisk -n2:0:0    -t2:BF00 -c2:ZFS "$DISK_DEVICE"
-partprobe "$DISK_DEVICE"
-sleep 2
+# Listet alle Laufwerke auf, die als Installationsziel infrage kommen, und
+# laesst interaktiv eins auswaehlen. Schliesst das Medium, von dem gerade
+# gebootet wurde (z.B. der USB-Stick mit der Live-ISO), automatisch aus -
+# archiso mountet das unter /run/archiso/bootmnt, darueber laesst sich das
+# zugrundeliegende Blockgeraet ermitteln.
+select_disk() {
+    local boot_src="" boot_disk=""
+    boot_src="$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)"
+    if [[ -n "$boot_src" ]]; then
+        boot_disk="/dev/$(lsblk -no PKNAME "$boot_src" 2>/dev/null || true)"
+    fi
 
-echo "--- EFI-Partition formatieren ---"
-mkfs.vfat -F32 -n EFI "$EFI_PART"
+    local -a names sizes labels
+    local line NAME SIZE MODEL TRAN RM
+    # -P (Key="Value"-Paare) statt --separator: robust auch bei Leerzeichen
+    # in MODEL, und --separator fehlt auf manchen (aelteren) util-linux-
+    # Versionen (z.B. auf manchen Live-ISOs beobachtet).
+    while IFS= read -r line; do
+        NAME="" SIZE="" MODEL="" TRAN="" RM=""
+        eval "$line"
+        [[ -n "$boot_disk" && "$NAME" == "$boot_disk" ]] && continue
+        [[ "$NAME" =~ ^/dev/(loop|sr|zram) ]] && continue
+        names+=("$NAME")
+        sizes+=("$SIZE")
+        local extra="${MODEL:-unbekanntes Modell}"
+        [[ -n "$TRAN" ]] && extra="$extra, $TRAN"
+        [[ "$RM" == "1" ]] && extra="$extra, WECHSELDATENTRAEGER"
+        labels+=("$extra")
+    done < <(lsblk -dPp -o NAME,SIZE,MODEL,TRAN,RM)
 
-echo "--- ZFS-Pool anlegen ---"
-zpool create -f \
-    -o ashift=12 \
-    -o autotrim=on \
-    -O acltype=posixacl \
-    -O relatime=on \
-    -O xattr=sa \
-    -O dnodesize=auto \
-    -O normalization=formD \
-    -O mountpoint=none \
-    -O canmount=off \
-    -O compression=zstd \
-    -R /mnt \
-    "$ZPOOL_NAME" "$ZFS_PART"
+    if [[ ${#names[@]} -eq 0 ]]; then
+        echo "FEHLER: Kein passendes Zielgeraet gefunden (lsblk lieferte nichts Brauchbares)." >&2
+        exit 1
+    fi
 
-zfs create -o mountpoint=none "${ZPOOL_NAME}/ROOT"
-zfs create -o mountpoint=/ -o canmount=noauto "$ROOT_DATASET"
-zpool set bootfs="$ROOT_DATASET" "$ZPOOL_NAME"
-zfs create -o mountpoint=/home "$HOME_DATASET"
-zfs set "org.zfsbootmenu:commandline=${ZBM_KERNEL_CMDLINE}" "$ROOT_DATASET"
+    echo "Verfuegbare Laufwerke (das Boot-Medium ist bereits ausgeschlossen):" >&2
+    local i
+    for i in "${!names[@]}"; do
+        printf '  [%d] %-14s %8s   %s\n' "$((i + 1))" "${names[$i]}" "${sizes[$i]}" "${labels[$i]}" >&2
+    done
+    echo >&2
 
-zfs mount "$ROOT_DATASET"
-zfs mount -a
+    local choice
+    while true; do
+        read -r -p "Nummer des Ziel-Laufwerks eingeben: " choice
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#names[@]} )); then
+            DISK_DEVICE="${names[$((choice - 1))]}"
+            return
+        fi
+        echo "Ungueltige Auswahl, bitte Nummer aus der Liste eingeben." >&2
+    done
+}
 
-mkdir -p /mnt/boot/efi
-mount "$EFI_PART" /mnt/boot/efi
+if [[ $resume -eq 0 ]]; then
+    select_disk
+fi
 
-echo "--- pacstrap: Minimalsystem (Rest kommt via Ansible/paru) ---"
-# zfs-dkms/zfs-utils bewusst NICHT hier: auf dem Referenzsystem sind das
-# AUR-Pakete (pacman -Qqm bestaetigt das), nicht aus offiziellen Repos
-# installierbar. Werden von roles/packages via paru IM chroot gebaut
-# (braucht dafuer nur linux-lts-headers+base-devel, die hier schon
-# pacstrap-t werden) - das Live-System braucht sein eigenes, per
-# archzfs/eoli3n geladenes zfs.ko nur fuer die zpool/zfs-Befehle oben.
-# CPU-Microcode (intel-ucode/amd-ucode) ebenfalls bewusst NICHT hier fest
-# eingetragen - roles/hardware erkennt den tatsaechlichen CPU-Hersteller
-# per /proc/cpuinfo (via /mnt/proc bind-mount unten real sichtbar) und
-# roles/packages installiert das passende Paket. Macht dieses Skript
-# unabhaengig von der konkreten Zielhardware.
-pacstrap -K /mnt \
-    base base-devel "$KERNEL_PKG" "$KERNEL_HEADERS_PKG" linux-firmware \
-    networkmanager networkmanager-openvpn \
-    git ansible python sudo vim efibootmgr dosfstools mtools nftables openvpn
+# Partitions-Suffix: Geraete, deren Name auf eine Ziffer endet (nvme0n1,
+# loop0, mmcblk0, ...) brauchen ein "p" vor der Partitionsnummer
+# (nvme0n1p1), alle anderen (sda, vda, xvda, ...) nicht (vda1, nicht
+# vdap1). Naive "${DISK_DEVICE}p1"-Annahme bricht z.B. in QEMU mit
+# virtio-Disks (/dev/vda) - live erst so gefunden.
+case "$DISK_DEVICE" in
+    *[0-9]) PART_SUFFIX="p" ;;
+    *) PART_SUFFIX="" ;;
+esac
+EFI_PART="${DISK_DEVICE}${PART_SUFFIX}1"
+ZFS_PART="${DISK_DEVICE}${PART_SUFFIX}2"
 
-echo "--- fstab (nur EFI-Partition, ZFS braucht keinen fstab-Eintrag) ---"
-genfstab -U /mnt | grep -E '/boot/efi|^#' > /mnt/etc/fstab
+echo "=== laptop-restore: Stufe 0 (Disk + Base-Install) ==="
+echo "Ziel-Disk:      $DISK_DEVICE"
+echo "EFI-Partition:   $EFI_PART"
+echo "ZFS-Partition:   $ZFS_PART"
+echo "Pool-Name:       $ZPOOL_NAME"
+echo
 
-echo "--- Netzwerk-Auskunft ins chroot kopieren ---"
-cp -L /etc/resolv.conf /mnt/etc/resolv.conf
+stage0_done=0
+cleanup() {
+    local exit_status=$?
+    echo "--- Raeume Bind-Mounts unter /mnt auf ---"
+    umount -R /mnt/dev 2>/dev/null || true
+    umount -R /mnt/sys 2>/dev/null || true
+    umount -R /mnt/proc 2>/dev/null || true
+
+    if [[ $exit_status -ne 0 && $stage0_done -eq 0 ]]; then
+        # Nur aufraeumen, wenn STUFE 0 SELBST fehlgeschlagen ist (Marker
+        # wurde noch nicht geschrieben) - damit der naechste Versuch nicht
+        # auf einen noch "aktiven" Pool trifft ("is part of active pool"
+        # bei zpool create). Ist Stufe 0 dagegen fertig und nur Ansible
+        # (Stufe 1) ist gescheitert, bewusst NICHT aushaengen/exportieren -
+        # genau das soll der naechste Aufruf ja wiederverwenden koennen.
+        echo "--- Stufe 0 fehlgeschlagen: EFI + ZFS-Pool sauber aushaengen ---"
+        umount /mnt/boot/efi 2>/dev/null || true
+        zfs unmount -a 2>/dev/null || true
+        zpool export "$ZPOOL_NAME" 2>/dev/null || true
+        rm -f "$STATE_FILE"
+    fi
+}
+trap cleanup EXIT
+
+if [[ $resume -eq 1 ]]; then
+    echo "--- Vorhandenen Pool wieder einhaengen ---"
+    if ! zpool list -H "$ZPOOL_NAME" >/dev/null 2>&1; then
+        zpool import -f -R /mnt "$ZPOOL_NAME"
+    fi
+    if [[ "$(zfs get -H -o value mounted "$ROOT_DATASET" 2>/dev/null)" != "yes" ]]; then
+        zfs mount "$ROOT_DATASET"
+    fi
+    zfs mount -a
+    mountpoint -q /mnt/boot/efi || mount "$EFI_PART" /mnt/boot/efi
+else
+    # Reste eines vorherigen, NICHT erfolgreich abgeschlossenen Laufs
+    # aufraeumen (z.B. Skript-Abbruch mitten in der Partitionierung).
+    # Alles per || true, da es beim allerersten Lauf nichts zum Aufraeumen
+    # gibt.
+    echo "--- Reste eines vorherigen, unfertigen Laufs aufraeumen (falls vorhanden) ---"
+    umount -R /mnt 2>/dev/null || true
+    zpool export "$ZPOOL_NAME" 2>/dev/null || true
+
+    echo "--- Partitioniere $DISK_DEVICE ---"
+    wipefs -af "$DISK_DEVICE"
+    sgdisk --zap-all "$DISK_DEVICE"
+    sgdisk -n1:1M:+1G -t1:EF00 -c1:EFI "$DISK_DEVICE"
+    sgdisk -n2:0:0    -t2:BF00 -c2:ZFS "$DISK_DEVICE"
+    partprobe "$DISK_DEVICE"
+    sleep 2
+
+    echo "--- EFI-Partition formatieren ---"
+    mkfs.vfat -F32 -n EFI "$EFI_PART"
+
+    echo "--- ZFS-Pool anlegen ---"
+    zpool create -f \
+        -o ashift=12 \
+        -o autotrim=on \
+        -O acltype=posixacl \
+        -O relatime=on \
+        -O xattr=sa \
+        -O dnodesize=auto \
+        -O normalization=formD \
+        -O mountpoint=none \
+        -O canmount=off \
+        -O compression=zstd \
+        -R /mnt \
+        "$ZPOOL_NAME" "$ZFS_PART"
+
+    zfs create -o mountpoint=none "${ZPOOL_NAME}/ROOT"
+    zfs create -o mountpoint=/ -o canmount=noauto "$ROOT_DATASET"
+    zpool set bootfs="$ROOT_DATASET" "$ZPOOL_NAME"
+    zfs create -o mountpoint=/home "$HOME_DATASET"
+    zfs set "org.zfsbootmenu:commandline=${ZBM_KERNEL_CMDLINE}" "$ROOT_DATASET"
+
+    zfs mount "$ROOT_DATASET"
+    zfs mount -a
+
+    mkdir -p /mnt/boot/efi
+    mount "$EFI_PART" /mnt/boot/efi
+
+    echo "--- pacstrap: Minimalsystem (Rest kommt via Ansible/paru) ---"
+    # zfs-dkms/zfs-utils bewusst NICHT hier: auf dem Referenzsystem sind das
+    # AUR-Pakete (pacman -Qqm bestaetigt das), nicht aus offiziellen Repos
+    # installierbar. Werden von roles/packages via paru IM chroot gebaut
+    # (braucht dafuer nur linux-lts-headers+base-devel, die hier schon
+    # pacstrap-t werden) - das Live-System braucht sein eigenes, per
+    # archzfs/eoli3n geladenes zfs.ko nur fuer die zpool/zfs-Befehle oben.
+    # CPU-Microcode (intel-ucode/amd-ucode) ebenfalls bewusst NICHT hier fest
+    # eingetragen - roles/hardware erkennt den tatsaechlichen CPU-Hersteller
+    # per /proc/cpuinfo (via /mnt/proc bind-mount unten real sichtbar) und
+    # roles/packages installiert das passende Paket. Macht dieses Skript
+    # unabhaengig von der konkreten Zielhardware.
+    pacstrap -K /mnt \
+        base base-devel "$KERNEL_PKG" "$KERNEL_HEADERS_PKG" linux-firmware \
+        networkmanager networkmanager-openvpn \
+        git ansible python sudo vim efibootmgr dosfstools mtools nftables openvpn
+
+    echo "--- fstab (nur EFI-Partition, ZFS braucht keinen fstab-Eintrag) ---"
+    genfstab -U /mnt | grep -E '/boot/efi|^#' > /mnt/etc/fstab
+
+    echo "--- Netzwerk-Auskunft ins chroot kopieren ---"
+    cp -L /etc/resolv.conf /mnt/etc/resolv.conf
+fi
 
 echo "--- /proc, /sys, /dev, efivars nach /mnt bind-mounten ---"
 # Ansibles "chroot"-Connection-Plugin macht pro Modul nur ein nacktes
 # chroot(2) - anders als arch-chroot bindet es NICHT automatisch /proc,
 # /sys, /dev. Ohne /proc+efivars schlagen u.a. systemctl, makepkg (AUR-
 # Builds) und efibootmgr im chroot fehl. Werden am Skriptende wieder
-# ausgehaengt (auch bei Fehlern, siehe trap unten).
+# ausgehaengt (siehe trap oben) - deshalb bei jedem Aufruf (auch resume)
+# neu setzen.
 for fs in proc sys dev; do
     mount --rbind "/$fs" "/mnt/$fs"
     mount --make-rslave "/mnt/$fs"
@@ -284,27 +356,14 @@ if [[ -d /sys/firmware/efi/efivars ]]; then
     mount --rbind /sys/firmware/efi/efivars /mnt/sys/firmware/efi/efivars
 fi
 
-cleanup() {
-    local exit_status=$?
-    echo "--- Raeume Bind-Mounts unter /mnt auf ---"
-    umount -R /mnt/dev 2>/dev/null || true
-    umount -R /mnt/sys 2>/dev/null || true
-    umount -R /mnt/proc 2>/dev/null || true
-
-    if [[ $exit_status -ne 0 ]]; then
-        # Im Fehlerfall so gruendlich wie moeglich aufraeumen, damit der
-        # naechste Versuch nicht auf einen noch "aktiven" Pool trifft
-        # ("is part of active pool" bei zpool create). zfs unmount -a statt
-        # rohem umount, weil das ZFS' eigene Buchfuehrung mitnimmt. Bei
-        # Erfolg bewusst NICHT aushaengen - siehe Abschlussmeldung unten,
-        # der Nutzer soll vor dem manuellen Reboot noch pruefen koennen.
-        echo "--- Fehlerfall: EFI-Partition + ZFS-Pool sauber aushaengen ---"
-        umount /mnt/boot/efi 2>/dev/null || true
-        zfs unmount -a 2>/dev/null || true
-        zpool export "$ZPOOL_NAME" 2>/dev/null || true
-    fi
-}
-trap cleanup EXIT
+# Ab hier gilt Stufe 0 als abgeschlossen - Marker schreiben, damit ein
+# fehlgeschlagener Ansible-Lauf (Stufe 1) beim naechsten Aufruf direkt
+# hier fortsetzen kann, statt wieder zu partitionieren/pacstrap-en.
+cat > "$STATE_FILE" <<EOF
+DISK_DEVICE=$DISK_DEVICE
+STAGE0_DONE=1
+EOF
+stage0_done=1
 
 echo "--- Ansible-Repo ins Zielsystem spiegeln ---"
 # Ansible selbst laeuft vom Live-System aus (nicht von innerhalb eines
@@ -336,15 +395,18 @@ done
 
 # disk_device explizit ueberschreiben: group_vars/all/vars.yml enthaelt nur
 # einen Default-Vorschlag (echte Hardware), das tatsaechliche Ziel wurde
-# oben interaktiv ausgewaehlt.
+# oben interaktiv ausgewaehlt (oder aus dem Marker uebernommen).
 ansible-playbook -i inventory/chroot.ini site.yml "${vault_args[@]}" \
     -e "disk_device=${DISK_DEVICE}" "$@"
 status=$?
 
 echo
 if [[ $status -eq 0 ]]; then
-    echo "=== Fertig. Vor dem Reboot pruefen: efibootmgr, dann 'umount -R /mnt' (falls noch nicht durch trap erledigt) und neu starten. ==="
+    echo "=== Fertig. Vor dem Reboot pruefen: efibootmgr, dann 'umount -R /mnt' und neu starten. ==="
+    rm -f "$STATE_FILE"
 else
-    echo "=== Ansible-Lauf mit Fehlern beendet (Exit $status). /mnt bleibt gemountet fuer Fehlersuche, Bind-Mounts werden trotzdem entfernt. ==="
+    echo "=== Ansible-Lauf mit Fehlern beendet (Exit $status). /mnt bleibt gemountet/importiert -"
+    echo "    einfach nochmal aufrufen, Stufe 0 (Partitionierung/pacstrap) wird dann uebersprungen."
+    echo "    Fuer einen kompletten Neustart stattdessen: $0 --reset ==="
 fi
 exit "$status"
