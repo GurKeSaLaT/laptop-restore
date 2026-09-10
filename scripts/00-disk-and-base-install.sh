@@ -434,29 +434,36 @@ fi
 # und "zfs mount ROOT_DATASET" uebersprungen wird, waehrend Home aus
 # irgendeinem fruehen Zustand heraus schon existierte).
 #
-# Fix: explizit sicherstellen, dass /mnt (Root) VOR /mnt/home (Home)
-# gemountet ist, UND Home danach zwingend neu mounten (erzwungenes
-# Aushaengen zuerst - harmlose No-Op, falls nichts/falsch gemountet war -
-# dann Neu-Mount), damit es sich garantiert an den jetzt korrekt
-# gemounteten Root-Dataset haengt. Bewusst UNBEDINGT, nicht nur "falls
-# noch nicht gemountet" - genau dieser falsche Eindruck ("ist doch schon
-# gemountet") war ja das eigentliche Problem.
+# Fix nur bei Bedarf anwenden, nicht unbedingt: ein bereits korrekt
+# verschachtelter Home-Mount (der Normalfall - der frische Installationspfad
+# oben mountet Root vor Home schon richtig) darf NICHT anlasslos aus- und
+# wieder eingehaengt werden - live erlebt, dass genau das selbst einen
+# vorher gesunden Mount kaputtmachen kann (das erzwungene Aushaengen
+# schlaegt aus einem voellig anderen, harmlosen Grund fehl - z.B. kurz
+# nach pacstrap kurzzeitig "busy" -, das anschliessende Pflicht-Neu-Mounten
+# bricht dann mit "already mounted" ab, obwohl vorher alles in Ordnung war).
 #
-# "mountpoint" wird hier bewusst NICHT mehr zur Pruefung benutzt: ZFS
-# vergibt Datasets aus demselben Pool teils dieselbe Geraetenummer (st_dev)
-# wie ihr Eltern-Dataset - "mountpoint"s klassischer st_dev-Vergleich
-# zwischen Pfad und Elternverzeichnis liefert dafuer live nachweislich
-# falsche Ergebnisse (meldet "kein Mountpoint", obwohl es echt gemountet
-# war). "findmnt" liest stattdessen die echte Kernel-Mount-Tabelle
-# (/proc/self/mountinfo) und ist davon nicht betroffen.
-mountpoint -q /mnt || zfs mount "$ROOT_DATASET"
-zfs unmount -f "$HOME_DATASET" 2>/dev/null || true
-zfs mount "$HOME_DATASET"
-if ! findmnt /mnt/home >/dev/null; then
-    echo "FEHLER: /mnt/home haengt nach dem Neu-Mount immer noch nicht korrekt im Mount-Baum." >&2
+# Deshalb per /proc/self/mountinfo (Mount-ID von /mnt vs. Parent-Mount-ID
+# von /mnt/home) EXPLIZIT pruefen, ob Home wirklich korrekt unter Root
+# haengt, bevor ueberhaupt etwas angefasst wird. "mountpoint" eignet sich
+# dafuer NICHT: ZFS vergibt Datasets aus demselben Pool teils dieselbe
+# Geraetenummer (st_dev) wie ihr Eltern-Dataset - "mountpoint"s klassischer
+# st_dev-Vergleich liefert dafuer live nachweislich falsche Ergebnisse.
+_root_mnt_id() { awk '$5=="/mnt"{print $1; exit}' /proc/self/mountinfo; }
+_home_parent_id() { awk '$5=="/mnt/home"{print $2; exit}' /proc/self/mountinfo; }
+
+if [[ "$(_home_parent_id)" != "$(_root_mnt_id)" ]]; then
+    echo "--- WARNUNG: /mnt/home haengt nicht korrekt unter /mnt im Mount-Baum - repariere ---" >&2
     zfs list -o name,mounted,mountpoint "$ZPOOL_NAME" "$ROOT_DATASET" "$HOME_DATASET" >&2 || true
     grep -E ' /mnt(/| )' /proc/self/mountinfo >&2 || true
-    exit 1
+    mountpoint -q /mnt || zfs mount "$ROOT_DATASET"
+    zfs unmount -f "$HOME_DATASET" 2>/dev/null || true
+    zfs mount "$HOME_DATASET"
+    if [[ "$(_home_parent_id)" != "$(_root_mnt_id)" ]]; then
+        echo "FEHLER: /mnt/home haengt nach dem Neu-Mount immer noch nicht korrekt im Mount-Baum." >&2
+        exit 1
+    fi
+    echo "--- /mnt/home korrekt nachgemountet ---"
 fi
 
 # Ab hier gilt Stufe 0 als abgeschlossen - Marker schreiben, damit ein

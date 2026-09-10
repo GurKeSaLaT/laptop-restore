@@ -25,24 +25,30 @@
 # Ergebnisse. "findmnt" liest stattdessen die echte Kernel-Mount-Tabelle
 # (/proc/self/mountinfo) und ist davon nicht betroffen.
 #
-# Fix: UNBEDINGT (nicht nur "falls nicht gemountet" - "sieht gemountet
-# aus" ist ja genau das truegerische Symptom) erst sicherstellen, dass
-# Root gemountet ist, dann Home erzwungen aus- und neu einhaengen, damit
-# es sich garantiert an den jetzt korrekt gemounteten Root-Dataset haengt.
-# "zfs" kann dafuer nicht IM Ziel-Chroot laufen (das hat an diesem
-# fruehen Punkt noch kein zfs-utils installiert, kommt erst aus
-# roles/packages - "No such file or directory" live so gesehen) -
-# "delegate_to: localhost" fuehrt den Befehl stattdessen auf dem
-# Ansible-Controller aus, also dem Live-System selbst, das zfs
-# garantiert bootstrapped hat. scripts/00-disk-and-base-install.sh macht
-# denselben Fix schon einmal auf dem Live-System, unmittelbar bevor
-# dieser Ansible-Lauf startet - hier nur noch als letzte Absicherung.
-- name: /home auf dem Live-System (Ansible-Controller) korrekt (neu) mounten
+# scripts/00-disk-and-base-install.sh macht denselben Fix schon auf dem
+# Live-System, unmittelbar bevor dieser Ansible-Lauf startet - hier nur
+# noch als letzte Absicherung. Fix nur bei tatsaechlichem Bedarf (per
+# Mount-ID-Vergleich in /proc/self/mountinfo), NICHT unbedingt: ein
+# bereits korrekt verschachtelter Home-Mount darf nicht anlasslos aus-
+# und wieder eingehaengt werden - live erlebt, dass ein erzwungenes
+# Aushaengen aus einem voellig anderen, harmlosen Grund fehlschlagen kann
+# (z.B. kurz "busy"), und das anschliessende Pflicht-Neu-Mounten dann mit
+# "already mounted" abbricht, obwohl vorher alles in Ordnung war. "zfs"
+# kann dafuer nicht IM Ziel-Chroot laufen (das hat an diesem fruehen
+# Punkt noch kein zfs-utils installiert, kommt erst aus roles/packages -
+# "No such file or directory" live so gesehen) - "delegate_to: localhost"
+# fuehrt den Befehl stattdessen auf dem Ansible-Controller aus, also dem
+# Live-System selbst, das zfs garantiert bootstrapped hat.
+- name: /home auf dem Live-System (Ansible-Controller) korrekt (neu) mounten, falls noetig
   ansible.builtin.shell: |
     set -e
-    mountpoint -q /mnt || zfs mount {{ root_dataset }}
-    zfs unmount -f {{ home_dataset }} 2>/dev/null || true
-    zfs mount {{ home_dataset }}
+    root_id="$(awk '$5=="/mnt"{print $1; exit}' /proc/self/mountinfo)"
+    home_parent_id="$(awk '$5=="/mnt/home"{print $2; exit}' /proc/self/mountinfo)"
+    if [ "$home_parent_id" != "$root_id" ]; then
+        mountpoint -q /mnt || zfs mount {{ root_dataset }}
+        zfs unmount -f {{ home_dataset }} 2>/dev/null || true
+        zfs mount {{ home_dataset }}
+    fi
   delegate_to: localhost
 
 - name: Sicherstellen, dass /home jetzt korrekt im Mount-Baum haengt
