@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch BarContent.qml and re-apply VPN kill-switch icon patch on change
+
+[Path]
+PathModified=%h/.config/quickshell/ii/modules/ii/bar/BarContent.qml
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=Re-apply VPN kill-switch bar icon patch to BarContent.qml
+
+[Service]
+Type=oneshot
+ExecStart=%h/.config/quickshell/vpn-status/patch-bar.sh

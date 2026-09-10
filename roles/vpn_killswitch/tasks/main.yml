@@ -121,3 +121,26 @@
   ansible.builtin.systemd_service:
     name: "openvpn-client@{{ vpn_connection_name }}.service"
     enabled: false
+
+# Eigene Ergaenzung des Nutzers, unabhaengig vom dots-hyprland-Installer:
+# ~/.config/quickshell/vpn-status/patch-bar.sh (per roles/user_config
+# deployed, siehe roles/user_config/files/.config/quickshell/vpn-status/)
+# patcht ein VPN-Kill-Switch-Statussymbol in BarContent.qml - diese Datei
+# wird bei jedem dots-hyprland-Installer-Lauf durch den Sync von
+# dots/.config/quickshell ueberschrieben. Eine systemd --user Path-Unit
+# (ebenfalls per roles/user_config deployed) beobachtet BarContent.qml
+# und wendet den Patch automatisch erneut an, sobald sich die Datei
+# aendert - so uebersteht die Anpassung jeden Reinstall/Update.
+#
+# Die Unit-DATEIEN liegen zwar schon unter ~/.config/systemd/user/, sind
+# damit aber noch nicht AKTIV: das entspricht "systemctl --user enable",
+# was aber eine laufende --user-systemd-Instanz braucht (im Chroot nicht
+# vorhanden) - der Symlink unter default.target.wants/ ist das, was
+# "enable" tatsaechlich anlegt, und funktioniert auch rein dateibasiert.
+- name: VPN-Kill-Switch-Statussymbol-Patch (Bar-Icon) fuer {{ restore_user }} aktivieren
+  ansible.builtin.file:
+    src: ../vpn-status-bar-patch.path
+    dest: "/home/{{ restore_user }}/.config/systemd/user/default.target.wants/vpn-status-bar-patch.path"
+    state: link
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
