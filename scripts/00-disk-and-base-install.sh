@@ -363,7 +363,18 @@ else
     zfs create -o mountpoint=none "${ZPOOL_NAME}/ROOT"
     zfs create -o mountpoint=/ -o canmount=noauto "$ROOT_DATASET"
     zpool set bootfs="$ROOT_DATASET" "$ZPOOL_NAME"
-    zfs create -o mountpoint=/home "$HOME_DATASET"
+    # "-u": "zfs create" mountet ein neu angelegtes Dataset SOFORT bei der
+    # Erstellung selbst (Standardverhalten, sofern canmount nicht
+    # off/noauto ist) - noch VOR der expliziten "zfs mount ROOT_DATASET"-
+    # Zeile zwei Zeilen weiter unten. Root-Ursache des lange verfolgten
+    # /home-Mount-Problems (per /proc/self/mountinfo verifiziert: Home
+    # bekam eine NIEDRIGERE Mount-ID als Root, war also chronologisch
+    # frueher gemountet) - Home haengt sich dadurch als GESCHWISTER- statt
+    # KIND-Mount von Root im Kernel-Mount-Baum auf. "-u" unterdrueckt das
+    # automatische Mounten, sodass ausschliesslich die beiden folgenden
+    # Zeilen (Root zuerst, dann "zfs mount -a" fuer Home) die
+    # Mount-Reihenfolge bestimmen.
+    zfs create -u -o mountpoint=/home "$HOME_DATASET"
     zfs set "org.zfsbootmenu:commandline=${ZBM_KERNEL_CMDLINE}" "$ROOT_DATASET"
 
     zfs mount "$ROOT_DATASET"
