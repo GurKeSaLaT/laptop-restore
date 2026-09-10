@@ -397,6 +397,30 @@ if [[ -d /sys/firmware/efi/efivars ]]; then
     mount --rbind /sys/firmware/efi/efivars /mnt/sys/firmware/efi/efivars
 fi
 
+# Letzte Absicherung: /mnt/home MUSS an dieser Stelle das eigene
+# ZFS-Dataset sein, nicht der leere Ordner auf dem Root-Dataset - sonst
+# landet der komplette Home-Ordner des Zielsystems (SSH-Key, Dotfiles,
+# Configs) unbemerkt auf dem Root-Dataset (live so erlebt, nie
+# abschliessend root-caused - "zfs mount -a" weiter oben im Skript
+# sollte das eigentlich schon abdecken). roles/base_system prueft das
+# zwar zu Beginn von Stufe 1 nochmal, kann dort aber nicht mehr
+# reparieren: das Zielsystem hat an dem Punkt noch gar kein zfs-utils
+# installiert (kommt erst spaeter aus roles/packages), "zfs mount" im
+# chroot schlaegt dann mit "No such file or directory" fehl (live so
+# gesehen). Hier auf dem Live-System (wo zfs sicher verfuegbar ist)
+# reparieren, nicht erst in der Ansible-Rolle.
+if ! mountpoint -q /mnt/home; then
+    echo "--- WARNUNG: /mnt/home ist (noch) kein eigener Mountpoint - versuche nachzumounten ---" >&2
+    zfs list -o name,mounted,mountpoint "$ZPOOL_NAME" "$HOME_DATASET" >&2 || true
+    mount | grep -E ' /mnt(/| )' >&2 || true
+    zfs mount "$HOME_DATASET"
+    if ! mountpoint -q /mnt/home; then
+        echo "FEHLER: /mnt/home immer noch kein Mountpoint nach 'zfs mount ${HOME_DATASET}'." >&2
+        exit 1
+    fi
+    echo "--- /mnt/home erfolgreich nachgemountet ---"
+fi
+
 # Ab hier gilt Stufe 0 als abgeschlossen - Marker schreiben, damit ein
 # fehlgeschlagener Ansible-Lauf (Stufe 1) beim naechsten Aufruf direkt
 # hier fortsetzen kann, statt wieder zu partitionieren/pacstrap-en.

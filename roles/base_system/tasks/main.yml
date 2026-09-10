@@ -1,28 +1,24 @@
 ---
 # Live beobachtet: /home (eigenes ZFS-Dataset, getrennt vom Root-Dataset,
 # damit es Boot-Environment-Rollbacks uebersteht) war beim allerersten
-# Ansible-Task bereits NICHT gemountet, obwohl scripts/00-disk-and-base-
-# install.sh "zfs mount -a" laut Code vor dem Start von Ansible aufruft -
-# der genaue Mechanismus dahinter ist ungeklaert. Ergebnis war kein
-# Fehler, sondern ein STILLER Fallback: der Benutzer-Home-Ordner (2.4G,
-# SSH-Key, Dotfiles, Configs - alles) wurde stattdessen unbemerkt direkt
-# auf dem Root-Dataset angelegt, das separate Home-Dataset blieb leer.
-# Deshalb hier VOR jedem anderen Task hart pruefen (und wo moeglich
-# selbst reparieren), statt das Root-Dataset stillschweigend vollzuschreiben.
+# Ansible-Task bereits NICHT gemountet - Ergebnis war kein Fehler,
+# sondern ein STILLER Fallback: der Benutzer-Home-Ordner (2.4G, SSH-Key,
+# Dotfiles, Configs - alles) wurde stattdessen unbemerkt direkt auf dem
+# Root-Dataset angelegt, das separate Home-Dataset blieb leer. Die
+# eigentliche Reparatur (per "zfs mount") passiert jetzt VOR diesem Lauf
+# noch auf dem Live-System in scripts/00-disk-and-base-install.sh -
+# NICHT hier, weil das Zielsystem an diesem fruehen Punkt noch gar kein
+# zfs-utils installiert hat (kommt erst aus roles/packages) und "zfs
+# mount" im chroot deshalb mit "No such file or directory" fehlschlaegt
+# (live so gesehen, als dieser Task noch selbst zu reparieren versuchte).
+# Hier nur noch eine letzte, harte Absicherung: wenn's trotzdem nicht
+# gemountet ist, sofort klar abbrechen statt das Root-Dataset
+# stillschweigend vollzuschreiben.
 - name: Pruefen, ob /home korrekt als eigenes Dataset gemountet ist
   ansible.builtin.command: mountpoint -q /home
   register: _home_mountpoint_check
-  failed_when: false
-  changed_when: false
-
-- name: /home nachmounten, falls es (noch) nicht als eigener Mountpoint erkannt wurde
-  ansible.builtin.command: "zfs mount {{ zpool_name }}/home"
-  when: _home_mountpoint_check.rc != 0
-  register: _home_remount
-
-- name: Erneut pruefen, ob /home jetzt korrekt gemountet ist
-  ansible.builtin.command: mountpoint -q /home
-  when: _home_mountpoint_check.rc != 0
+  failed_when: >-
+    _home_mountpoint_check.rc != 0
   changed_when: false
 
 - name: Hostname setzen
