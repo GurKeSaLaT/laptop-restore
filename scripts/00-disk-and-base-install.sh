@@ -166,6 +166,24 @@ if ! command -v zpool >/dev/null 2>&1; then
 fi
 echo "--- ZFS im Live-System bereit ---"
 
+# Hostid im Live-System auf denselben Wert setzen, den roles/zfsbootmenu
+# spaeter fuer das installierte Zielsystem setzt (spl_hostid aus
+# ZBM_KERNEL_CMDLINE) - MUSS vor "zpool create"/"zpool import" passieren.
+# ZFS stempelt beim Erstellen/Importieren eines Pools den aktuellen Hostid
+# als "zuletzt importiert von" hinein. Ohne das hier faellt das Live-System
+# auf den Default (0) zurueck, was spaeter vom fest gesetzten Hostid des
+# installierten Systems abweicht - beim ersten echten Boot verweigert der
+# zfs-mkinitcpio-Hook dann den Import ("pool was previously in use from
+# another system ... hostid=0"), ohne "-f" (das der Hook nicht automatisch
+# setzt) folgt ein Kernel Panic. Live so beobachtet und reproduziert.
+if [[ "$ZBM_KERNEL_CMDLINE" =~ spl_hostid=0x([0-9a-fA-F]+) ]]; then
+    zgenhostid -f "${BASH_REMATCH[1]}"
+    echo "--- Live-System-Hostid auf ${BASH_REMATCH[1]} gesetzt (konsistent mit dem Zielsystem) ---"
+else
+    echo "FEHLER: Konnte spl_hostid nicht aus zbm_kernel_cmdline extrahieren." >&2
+    exit 1
+fi
+
 loadkeys "$CONSOLE_KEYMAP" || true
 
 # --- Resume-Logik: schon abgeschlossene Stufe 0 aus vorherigem Lauf? ---
