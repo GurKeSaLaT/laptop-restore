@@ -144,3 +144,25 @@
     state: link
     owner: "{{ restore_user }}"
     group: "{{ restore_user }}"
+
+# Nur Referenz-Zugangsdaten fuer VPN-Verbindungen, die auf ANDEREN
+# Geraeten genutzt werden, nicht auf diesem Laptop - deshalb keine
+# eigene OpenVPN-Config/-Funktionalitaet dazu, nur die Dateien 1:1
+# wiederherstellen (wie auf dem Referenzsystem, unter ~/.config statt
+# /etc/openvpn/client - daher auch keine ProtectHome-Problematik wie
+# beim oben deployten Haupt-VPN).
+- name: Referenz-Zugangsdaten fuer weitere VPN-Verbindungen (andere Geraete) deployen
+  # Bewusst optional (default('') + when) statt vorausgesetzt - nicht
+  # jeder, der dieses (oeffentliche) Repo als Vorlage nutzt, hat exakt
+  # diese beiden persoenlichen VPN-Referenzeintraege im eigenen Vault.
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "/home/{{ restore_user }}/.config/openvpn/{{ item.name }}"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0600"
+  loop:
+    - {name: bridge_nb, content: "{{ vault_vpn_bridge_nb | default('') }}"}
+    - {name: bridge_rpi, content: "{{ vault_vpn_bridge_rpi | default('') }}"}
+  when: item.content | length > 0
+  no_log: true

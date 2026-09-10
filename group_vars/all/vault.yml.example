@@ -13,8 +13,26 @@
 #
 # Details zum Vault-Passwort selbst: docs/SECRETS.md
 
+# SHA-512-Crypt-Hash fuer den Login des Restore-Users (Konsole/TTY,
+# Display-Manager - sudo braucht es NICHT, siehe roles/base_system) -
+# erzeugen z.B. per "mkpasswd -m sha-512" oder "openssl passwd -6".
+# Ohne diesen Wert bleibt der Account gesperrt (kein Passwort in
+# /etc/shadow gesetzt), Login unmoeglich - live so erlebt.
+vault_user_password_hash: "CHANGE-ME"
+
 vault_vpn_username: "CHANGE-ME"
 vault_vpn_password: "CHANGE-ME"
+
+# Optional: Referenz-Zugangsdaten fuer weitere VPN-Verbindungen, die auf
+# ANDEREN Geraeten genutzt werden, nicht auf diesem Laptop - werden 1:1
+# nach ~/.config/openvpn/<name> deployt (siehe roles/vpn_killswitch),
+# ohne eigene OpenVPN-Funktionalitaet dazu. Ganz weglassen, falls nicht
+# gebraucht (dann auch die zugehoerigen Tasks in roles/vpn_killswitch
+# entfernen oder mit "when: vault_vpn_bridge_nb is defined" absichern).
+vault_vpn_bridge_nb: |
+  # CHANGE-ME oder Block komplett entfernen, falls nicht gebraucht.
+vault_vpn_bridge_rpi: |
+  # CHANGE-ME oder Block komplett entfernen, falls nicht gebraucht.
 
 # Hostname/Domain des eigenen VPN-Servers - verwendet von
 # roles/vpn_killswitch/templates/vpn-killswitch-apply.j2 (Heimnetz-Erkennung)
