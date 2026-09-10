@@ -195,3 +195,23 @@
     - {name: bridge_rpi, content: "{{ vault_vpn_bridge_rpi | default('') }}"}
   when: item.content | length > 0
   no_log: true
+
+# Live auf dem echten Boot-Test (nicht nur im Chroot) gefunden: die
+# ".path"-Unit oben (vpn-status-bar-patch.path) reagiert NUR auf
+# KUENFTIGE Aenderungen an BarContent.qml (PathModified=) - bei einem
+# frischen Restore wird die Datei genau einmal von roles/dotfiles
+# (./setup install) geschrieben und danach nicht mehr veraendert, bis
+# irgendwann ein spaeteres dots-hyprland-Update sie ueberschreibt. Die
+# Path-Unit loest also NIE von selbst aus, das Icon fehlte auf dem
+# ersten echten Boot komplett (manuell per SSH nachgeprueft: "systemctl
+# --user status vpn-status-bar-patch.service" -> "inactive (dead)",
+# kein VPN-Marker in BarContent.qml). Deshalb hier zusaetzlich einmalig
+# direkt ausfuehren, statt mich auf das kuenftige "on change" der
+# systemd-Units zu verlassen - die Units bleiben trotzdem bestehen,
+# damit spaetere dots-hyprland-Updates den Patch automatisch erneut
+# anwenden.
+- name: VPN-Kill-Switch-Statussymbol-Patch einmalig direkt anwenden (Path-Unit greift erst bei kuenftigen Aenderungen)
+  become: true
+  become_user: "{{ restore_user }}"
+  ansible.builtin.command: bash "/home/{{ restore_user }}/.config/quickshell/vpn-status/patch-bar.sh"
+  changed_when: true
