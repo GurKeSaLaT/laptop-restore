@@ -1,0 +1,49 @@
+---
+# Erfasst per scripts/capture-firefox.sh (siehe dort fuer Details/Deny-
+# Liste). roles/firefox/files/ ist optional - existiert nur, wenn das
+# Skript schon mal gelaufen ist (Fork dieses Repos ohne eigenen Firefox-
+# Capture soll nicht mit "Source directory does not exist" scheitern).
+- name: Pruefen, ob roles/firefox/files/ ueberhaupt existiert
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files"
+  delegate_to: localhost
+  become: false
+  register: _firefox_files_dir
+
+# profiles.ini/installs.ini referenzieren den Profil-Ordnernamen (z.B.
+# "k6hgyoy7.default-release") und den Install-Hash - beides 1:1 aus dem
+# Referenzsystem uebernommen, siehe Kommentar in scripts/capture-firefox.sh:
+# der Install-Hash haengt nur vom Installationspfad ab (bei Arch immer
+# /usr/lib/firefox), ist also fuer jede Standard-Arch-Firefox-Installation
+# identisch. Bestaetigt das nicht (z.B. bei einer sehr abweichenden
+# Firefox-Installation), erkennt Firefox einfach kein passendes Profil und
+# legt beim ersten Start regulaer ein neues eigenes an - degradiert also
+# sauber, statt etwas zu zerstoeren.
+- name: Firefox-Profil (profiles.ini/installs.ini + Bookmarks-Backup + user.js) deployen
+  ansible.builtin.copy:
+    src: files/
+    dest: "/home/{{ restore_user }}/.config/mozilla/firefox/"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+  when: _firefox_files_dir.stat.exists and _firefox_files_dir.stat.isdir
+
+# Erweiterungen NICHT als .xpi-Dateien im Repo, sondern per Firefox-
+# Enterprise-Policy (ExtensionSettings/force_installed) aus firefox_extensions
+# (roles/firefox/vars/main.yml) - installiert beim naechsten echten Firefox-
+# Start automatisch die jeweils aktuelle AMO-Version, unabhaengig vom
+# Profil-Match oben.
+- name: Firefox-Distribution-Verzeichnis sicherstellen
+  ansible.builtin.file:
+    path: /usr/lib/firefox/distribution
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Firefox-Erweiterungen per Policy (force_installed) einrichten
+  ansible.builtin.template:
+    src: policies.json.j2
+    dest: /usr/lib/firefox/distribution/policies.json
+    owner: root
+    group: root
+    mode: "0644"

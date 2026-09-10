@@ -24,6 +24,8 @@
       tags: [hyprland]
     - role: user_config
       tags: [user_config]
+    - role: firefox
+      tags: [firefox]
     - role: networkmanager
       tags: [networkmanager]
     - role: ssh

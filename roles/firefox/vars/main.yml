@@ -1,0 +1,11 @@
+---
+# Von scripts/capture-firefox.sh generiert - nicht von Hand pflegen.
+# Installations-URL wird in roles/firefox/tasks/main.yml aus der Extension-ID gebaut
+# (AMO's "/downloads/latest/<id>/latest.xpi" akzeptiert die rohe Erweiterungs-ID,
+# liefert live geprueft die jeweils aktuelle Version aus - kein fest einprogrammierter
+# Datei-Link, der mit der Zeit veraltet/deaktiviert werden koennte).
+firefox_extensions:
+  - id: "{446900e4-71c2-419f-a6a7-df9c091e268b}"
+    name: "Bitwarden Password Manager"
+  - id: "{6764c0b0-a70e-49dd-846c-c422fad35eec}"
+    name: "Youtube Playback Speed Control"
