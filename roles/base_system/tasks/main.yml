@@ -4,21 +4,37 @@
 # Ansible-Task bereits NICHT gemountet - Ergebnis war kein Fehler,
 # sondern ein STILLER Fallback: der Benutzer-Home-Ordner (2.4G, SSH-Key,
 # Dotfiles, Configs - alles) wurde stattdessen unbemerkt direkt auf dem
-# Root-Dataset angelegt, das separate Home-Dataset blieb leer. Die
-# eigentliche Reparatur (per "zfs mount") passiert jetzt VOR diesem Lauf
-# noch auf dem Live-System in scripts/00-disk-and-base-install.sh -
-# NICHT hier, weil das Zielsystem an diesem fruehen Punkt noch gar kein
-# zfs-utils installiert hat (kommt erst aus roles/packages) und "zfs
-# mount" im chroot deshalb mit "No such file or directory" fehlschlaegt
-# (live so gesehen, als dieser Task noch selbst zu reparieren versuchte).
-# Hier nur noch eine letzte, harte Absicherung: wenn's trotzdem nicht
-# gemountet ist, sofort klar abbrechen statt das Root-Dataset
-# stillschweigend vollzuschreiben.
+# Root-Dataset angelegt, das separate Home-Dataset blieb leer.
+#
+# scripts/00-disk-and-base-install.sh prueft/repariert das schon einmal
+# auf dem Live-System, UNMITTELBAR bevor dieser Ansible-Lauf startet -
+# live trotzdem noch als Race beobachtet: der Check dort war erfolgreich
+# (keine Warnung ausgegeben), aber dieser allererste Ansible-Task hat
+# /home danach trotzdem nicht gemountet vorgefunden. Irgendwo zwischen
+# Skript-Check und hier geht der Mount offenbar wieder verloren -
+# Mechanismus weiterhin ungeklaert.
+#
+# Deshalb hier zusaetzlich, direkt am Ort des tatsaechlichen
+# Fehlschlags, reparieren - kein zeitliches Fenster fuer eine Race mehr.
+# "zfs mount" kann aber nicht IM Ziel-Chroot laufen (das hat an diesem
+# fruehen Punkt noch kein zfs-utils installiert, kommt erst aus
+# roles/packages - "No such file or directory" live so gesehen) -
+# "delegate_to: localhost" fuehrt den Befehl stattdessen auf dem
+# Ansible-Controller aus, also dem Live-System selbst, das zfs
+# garantiert bootstrapped hat.
 - name: Pruefen, ob /home korrekt als eigenes Dataset gemountet ist
   ansible.builtin.command: mountpoint -q /home
   register: _home_mountpoint_check
-  failed_when: >-
-    _home_mountpoint_check.rc != 0
+  failed_when: false
+  changed_when: false
+
+- name: /home auf dem Live-System (Ansible-Controller) nachmounten, falls (noch) nicht gemountet
+  ansible.builtin.command: "zfs mount {{ zpool_name }}/home"
+  delegate_to: localhost
+  when: _home_mountpoint_check.rc != 0
+
+- name: Sicherstellen, dass /home jetzt korrekt gemountet ist
+  ansible.builtin.command: mountpoint -q /home
   changed_when: false
 
 - name: Hostname setzen
