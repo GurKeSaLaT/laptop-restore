@@ -393,10 +393,30 @@ for arg in "$@"; do
     esac
 done
 
+# -v als Default, falls keine eigene Verbositaet uebergeben wurde - zeigt
+# u.a. volle stdout/stderr abgeschlossener Tasks. WICHTIG: das macht
+# einzelne lange Shell-/Command-Tasks (paru-Build, ./setup install, ...)
+# trotzdem nicht live mitlesbar - ansible.builtin.command/shell puffern
+# die Ausgabe des Kindprozesses grundsaetzlich komplett und zeigen sie erst
+# nach dessen Ende, unabhaengig von der Verbositaet. Um bei einem lange
+# laufenden Task zu pruefen, ob er haengt oder nur dauert: in einer
+# zweiten SSH-Session z.B. "arch-chroot /mnt top" oder
+# "arch-chroot /mnt ps aux --sort=-%cpu | head" - laufende CPU-Last heisst
+# "arbeitet noch", keine Last ueber laengere Zeit heisst "haengt".
+verbosity_args=(-v)
+for arg in "$@"; do
+    case "$arg" in
+        -v|-vv|-vvv|-vvvv|-vvvvv|-vvvvvv|--verbose)
+            verbosity_args=()
+            break
+            ;;
+    esac
+done
+
 # disk_device explizit ueberschreiben: group_vars/all/vars.yml enthaelt nur
 # einen Default-Vorschlag (echte Hardware), das tatsaechliche Ziel wurde
 # oben interaktiv ausgewaehlt (oder aus dem Marker uebernommen).
-ansible-playbook -i inventory/chroot.ini site.yml "${vault_args[@]}" \
+ansible-playbook -i inventory/chroot.ini site.yml "${vault_args[@]}" "${verbosity_args[@]}" \
     -e "disk_device=${DISK_DEVICE}" "$@"
 status=$?
 
