@@ -43,6 +43,24 @@
   ansible.builtin.command: generate-zbm
   changed_when: true
 
+- name: Tatsaechlich erzeugten Dateinamen des EFI-Images ermitteln
+  # Nicht hart "VMLINUZ.EFI" annehmen: generate-zbm hat live tatsaechlich
+  # "vmlinuz-{{ kernel_pkg }}.EFI" erzeugt (kernelpaketbasierter Name),
+  # nicht den urspruenglich angenommenen generischen Namen - config.yaml
+  # war hier eine Rekonstruktion (siehe docs/NOT_COVERED.md), kein 1:1-
+  # Abbild der Original-Config. Dynamisch ermitteln macht die Rolle robust
+  # unabhaengig von der genauen generate-zbm-Namenskonvention.
+  ansible.builtin.find:
+    paths: /boot/efi/EFI/ZBM
+    patterns: "*.EFI"
+    excludes: "*-BACKUP.EFI"
+  register: _zbm_efi_images
+
+- name: Fehlschlagen, falls kein EFI-Image gefunden wurde
+  ansible.builtin.fail:
+    msg: "generate-zbm hat kein *.EFI unter /boot/efi/EFI/ZBM erzeugt."
+  when: _zbm_efi_images.matched == 0
+
 - name: EFI-Fallback-Verzeichnis anlegen
   ansible.builtin.file:
     path: /boot/efi/EFI/BOOT
@@ -52,7 +70,7 @@
 - name: Fallback-Kopie fuer verlorenen UEFI-NVRAM-Eintrag (Standard-Fallback-Pfad lt. UEFI-Spec)
   ansible.builtin.copy:
     remote_src: true
-    src: /boot/efi/EFI/ZBM/VMLINUZ.EFI
+    src: "{{ _zbm_efi_images.files[0].path }}"
     dest: /boot/efi/EFI/BOOT/BOOTX64.EFI
     mode: "0755"
 
@@ -66,7 +84,7 @@
   ansible.builtin.command:
     cmd: >-
       efibootmgr --create --disk {{ disk_device }} --part 1
-      --loader '\EFI\ZBM\VMLINUZ.EFI' --label "ZFSBootMenu"
+      --loader '\EFI\ZBM\{{ _zbm_efi_images.files[0].path | basename }}' --label "ZFSBootMenu"
   when:
     - _efibootmgr.rc is defined and _efibootmgr.rc == 0
     - "'ZFSBootMenu' not in _efibootmgr.stdout"
