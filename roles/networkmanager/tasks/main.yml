@@ -7,16 +7,34 @@
     group: root
     mode: "0644"
 
-- name: Bekannte WLANs aus vault.yml anlegen
-  # wifi_sec erwartet in der hier installierten community.general-Version
-  # ein Dict mit den rohen nmcli-Properties (key-mgmt/psk), keinen simplen
-  # String - live mit "argument 'wifi_sec' is of type str" gescheitert.
-  community.general.nmcli:
-    type: wifi
-    conn_name: "{{ item.ssid }}"
-    ssid: "{{ item.ssid }}"
-    wifi_sec: "{{ {'key-mgmt': 'wpa-psk', 'psk': item.psk} if item.psk | default('') | length > 0 else omit }}"
-    autoconnect: true
-    state: present
+- name: UUID je WLAN-Connection-Profil erzeugen
+  ansible.builtin.command: uuidgen
+  register: _wifi_uuids
+  changed_when: false
   loop: "{{ vault_wifi_networks | default([]) }}"
+  loop_control:
+    label: "{{ item.ssid }}"
+
+- name: Bekannte WLANs als NetworkManager-Connection-Profile anlegen
+  # community.general.nmcli faellt hier aus: es spricht mit dem laufenden
+  # NetworkManager-D-Bus-Dienst, den es im chroot nicht gibt ("Could not
+  # create NMClient object: Could not connect: No such file or directory",
+  # live so gescheitert - erst mit einem falsch typisierten wifi_sec-Wert,
+  # dann selbst mit korrektem Dict-Wert am fehlenden D-Bus). Stattdessen
+  # das .nmconnection-Keyfile direkt schreiben (exakt das Format, das
+  # NetworkManager selbst benutzt und beim naechsten echten Boot einliest -
+  # kein laufender Dienst noetig).
+  ansible.builtin.template:
+    src: wifi.nmconnection.j2
+    dest: "/etc/NetworkManager/system-connections/{{ item.item.ssid }}.nmconnection"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ _wifi_uuids.results }}"
+  loop_control:
+    label: "{{ item.item.ssid }}"
+  vars:
+    ssid: "{{ item.item.ssid }}"
+    psk: "{{ item.item.psk }}"
+    uuid: "{{ item.stdout }}"
   no_log: true
