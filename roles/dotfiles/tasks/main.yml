@@ -50,14 +50,28 @@
       # erst nach Abschluss des Befehls zurueck (siehe Kommentar in
       # scripts/00-disk-and-base-install.sh) - fuer einen Befehl, der
       # mehrere Minuten laufen kann, deshalb zusaetzlich per tee live in
-      # eine Datei spiegeln (Ansible bekommt trotzdem die volle Ausgabe,
-      # tee gibt sie ja auch weiter). Aus einer zweiten SSH-Session
-      # waehrenddessen mitlesbar:
-      #   tail -f /mnt/tmp/dots-hyprland-setup.log
-      # "set -o pipefail" + "executable: bash", damit der Exitcode von
-      # "./setup install" durchschlaegt und nicht der von tee.
+      # eine Datei spiegeln. Aus einer zweiten SSH-Session waehrenddessen
+      # mitlesbar: tail -f /mnt/tmp/dots-hyprland-setup.log
+      #
+      # "yes e |" davor: dots-hyprlands eigene Fehlerbehandlung (Funktion
+      # x() in sdata/lib/functions.sh) fragt bei JEDEM fehlgeschlagenen
+      # Befehl "Repeat/exit/ignore [R/e/i]" - OHNE $ask-Absicherung, -f
+      # deckt das also NICHT ab. Ohne TTY liest das sofort EOF, Default
+      # ist "R" (repeat) -> live als endlose Wiederholungsschleife
+      # beobachtet (stundenlang haengend, kein Fortschritt). "yes e"
+      # beantwortet jede solche Rueckfrage automatisch mit "e" (exit) -
+      # ein echter Fehler bricht dann sofort sauber ab, statt endlos zu
+      # wiederholen.
+      #
+      # ${PIPESTATUS[1]} statt pipefail: "yes" stirbt per SIGPIPE (non-zero
+      # exit) sobald ./setup install durch ist, auch bei Erfolg - pipefail
+      # wuerde das faelschlich als Fehlschlag werten. PIPESTATUS[1] greift
+      # gezielt den Exitcode von "./setup install" selbst heraus (Position
+      # 1 in der Pipe: yes=0, setup=1, tee=2), unabhaengig von yes/tee.
       ansible.builtin.shell:
-        cmd: "set -o pipefail; ./setup install -f -s 2>&1 | tee /tmp/dots-hyprland-setup.log"
+        cmd: >-
+          yes e | ./setup install -f -s 2>&1 | tee /tmp/dots-hyprland-setup.log;
+          exit ${PIPESTATUS[1]}
         chdir: "{{ dotfiles_dest }}"
         executable: /bin/bash
       changed_when: true
