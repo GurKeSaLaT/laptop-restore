@@ -400,19 +400,22 @@ fi
 # Letzte Absicherung: /mnt/home MUSS an dieser Stelle das eigene
 # ZFS-Dataset sein, nicht der leere Ordner auf dem Root-Dataset - sonst
 # landet der komplette Home-Ordner des Zielsystems (SSH-Key, Dotfiles,
-# Configs) unbemerkt auf dem Root-Dataset (live so erlebt, nie
-# abschliessend root-caused - "zfs mount -a" weiter oben im Skript
-# sollte das eigentlich schon abdecken). roles/base_system prueft das
-# zwar zu Beginn von Stufe 1 nochmal, kann dort aber nicht mehr
-# reparieren: das Zielsystem hat an dem Punkt noch gar kein zfs-utils
-# installiert (kommt erst spaeter aus roles/packages), "zfs mount" im
-# chroot schlaegt dann mit "No such file or directory" fehl (live so
-# gesehen). Hier auf dem Live-System (wo zfs sicher verfuegbar ist)
-# reparieren, nicht erst in der Ansible-Rolle.
+# Configs) unbemerkt auf dem Root-Dataset (live so erlebt). Root-Ursache
+# mittlerweile gefunden: kein Timing-Problem, sondern ZFS' eigene interne
+# "mounted"-Buchfuehrung geraet aus dem Tritt mit der tatsaechlichen
+# Kernel-Mount-Tabelle - "zfs mount" schlaegt dann mit "cannot mount
+# ...: filesystem already mounted" fehl, obwohl "mountpoint -q" (liest
+# die ECHTE Kernel-Mount-Tabelle) das Gegenteil sagt. Deshalb erst
+# erzwungen aushaengen (harmlose No-Op, falls wirklich nichts gemountet
+# ist - setzt ZFS' interne Buchfuehrung zurueck), dann erst mounten.
+# roles/base_system hat denselben Fix (dort per "delegate_to: localhost",
+# da das Zielsystem an dem Punkt noch kein zfs-utils hat) als letzte
+# Absicherung - hier soll es idealerweise schon gar nicht mehr noetig sein.
 if ! mountpoint -q /mnt/home; then
     echo "--- WARNUNG: /mnt/home ist (noch) kein eigener Mountpoint - versuche nachzumounten ---" >&2
     zfs list -o name,mounted,mountpoint "$ZPOOL_NAME" "$HOME_DATASET" >&2 || true
     mount | grep -E ' /mnt(/| )' >&2 || true
+    zfs unmount -f "$HOME_DATASET" 2>/dev/null || true
     zfs mount "$HOME_DATASET"
     if ! mountpoint -q /mnt/home; then
         echo "FEHLER: /mnt/home immer noch kein Mountpoint nach 'zfs mount ${HOME_DATASET}'." >&2

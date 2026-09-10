@@ -8,15 +8,19 @@
 #
 # scripts/00-disk-and-base-install.sh prueft/repariert das schon einmal
 # auf dem Live-System, UNMITTELBAR bevor dieser Ansible-Lauf startet -
-# live trotzdem noch als Race beobachtet: der Check dort war erfolgreich
-# (keine Warnung ausgegeben), aber dieser allererste Ansible-Task hat
-# /home danach trotzdem nicht gemountet vorgefunden. Irgendwo zwischen
-# Skript-Check und hier geht der Mount offenbar wieder verloren -
-# Mechanismus weiterhin ungeklaert.
+# live trotzdem noch als "Race" beobachtet, und ENDLICH root-caused: kein
+# Timing-Problem, sondern ZFS' eigene interne "mounted"-Buchfuehrung
+# geraet aus dem Tritt mit der tatsaechlichen Kernel-Mount-Tabelle. Live
+# gesehen: "zfs mount mappepool/home" schlug mit "cannot mount
+# 'mappepool/home': filesystem already mounted" fehl - ZFS selbst glaubt
+# also, es sei schon gemountet -, waehrend "mountpoint -q" (liest die
+# ECHTE Kernel-Mount-Tabelle) das Gegenteil sagt. Vermutlich Ueberrest
+# mehrerer zpool import/export-Zyklen ueber mehrere Testlaeufe/VM-Neustarts
+# hinweg. Standard-Fix fuer genau diesen ZFS-Zustand: einmal erzwungen
+# aushaengen (harmlose No-Op, falls wirklich nichts gemountet ist - setzt
+# ZFS' interne Buchfuehrung zurueck), dann erst mounten.
 #
-# Deshalb hier zusaetzlich, direkt am Ort des tatsaechlichen
-# Fehlschlags, reparieren - kein zeitliches Fenster fuer eine Race mehr.
-# "zfs mount" kann aber nicht IM Ziel-Chroot laufen (das hat an diesem
+# "zfs" kann dafuer nicht IM Ziel-Chroot laufen (das hat an diesem
 # fruehen Punkt noch kein zfs-utils installiert, kommt erst aus
 # roles/packages - "No such file or directory" live so gesehen) -
 # "delegate_to: localhost" fuehrt den Befehl stattdessen auf dem
@@ -28,8 +32,11 @@
   failed_when: false
   changed_when: false
 
-- name: /home auf dem Live-System (Ansible-Controller) nachmounten, falls (noch) nicht gemountet
-  ansible.builtin.command: "zfs mount {{ zpool_name }}/home"
+- name: /home auf dem Live-System (Ansible-Controller) aus-/nachmounten, falls (noch) nicht gemountet
+  ansible.builtin.shell: |
+    set -e
+    zfs unmount -f {{ zpool_name }}/home 2>/dev/null || true
+    zfs mount {{ zpool_name }}/home
   delegate_to: localhost
   when: _home_mountpoint_check.rc != 0
 
