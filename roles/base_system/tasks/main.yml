@@ -1,4 +1,30 @@
 ---
+# Live beobachtet: /home (eigenes ZFS-Dataset, getrennt vom Root-Dataset,
+# damit es Boot-Environment-Rollbacks uebersteht) war beim allerersten
+# Ansible-Task bereits NICHT gemountet, obwohl scripts/00-disk-and-base-
+# install.sh "zfs mount -a" laut Code vor dem Start von Ansible aufruft -
+# der genaue Mechanismus dahinter ist ungeklaert. Ergebnis war kein
+# Fehler, sondern ein STILLER Fallback: der Benutzer-Home-Ordner (2.4G,
+# SSH-Key, Dotfiles, Configs - alles) wurde stattdessen unbemerkt direkt
+# auf dem Root-Dataset angelegt, das separate Home-Dataset blieb leer.
+# Deshalb hier VOR jedem anderen Task hart pruefen (und wo moeglich
+# selbst reparieren), statt das Root-Dataset stillschweigend vollzuschreiben.
+- name: Pruefen, ob /home korrekt als eigenes Dataset gemountet ist
+  ansible.builtin.command: mountpoint -q /home
+  register: _home_mountpoint_check
+  failed_when: false
+  changed_when: false
+
+- name: /home nachmounten, falls es (noch) nicht als eigener Mountpoint erkannt wurde
+  ansible.builtin.command: "zfs mount {{ zpool_name }}/home"
+  when: _home_mountpoint_check.rc != 0
+  register: _home_remount
+
+- name: Erneut pruefen, ob /home jetzt korrekt gemountet ist
+  ansible.builtin.command: mountpoint -q /home
+  when: _home_mountpoint_check.rc != 0
+  changed_when: false
+
 - name: Hostname setzen
   ansible.builtin.copy:
     dest: /etc/hostname
