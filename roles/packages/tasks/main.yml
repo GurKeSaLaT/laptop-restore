@@ -16,61 +16,68 @@
     name: "{{ pacman_packages + [fish_package] + gpu_packages + ([ucode_pkg] if ucode_pkg else []) }}"
     state: present
 
-- name: Temporaeres NOPASSWD fuer AUR-Builds (wird am Ende wieder entfernt)
-  ansible.builtin.copy:
-    dest: /etc/sudoers.d/99-ansible-aur-build
-    content: "{{ restore_user }} ALL=(ALL) NOPASSWD: ALL\n"
-    owner: root
-    group: root
-    mode: "0440"
-    validate: "visudo -cf %s"
-
-- name: Pruefen ob paru schon installiert ist
-  ansible.builtin.stat:
-    path: /usr/bin/paru
-  register: _paru_bin
-
-- name: paru aus AUR bauen (Bootstrap, sonst kein AUR-Helper verfuegbar)
-  # paru-bin (vorkompiliertes Paket) wurde hier testweise verwendet, um das
-  # OOM beim Quell-Build zu umgehen - live aber an einem ABI-Mismatch
-  # gescheitert ("libalpm.so.15: cannot open shared object file"), weil
-  # paru-bin gegen eine andere libalpm-Version gebaut ist als tatsaechlich
-  # installiert (Rolling-Release, Version kann jederzeit abweichen). Ein
-  # Quell-Build linkt dagegen immer exakt gegen die installierte libalpm.
-  # Das eigentliche OOM-Problem war die 4G-RAM-Test-VM (behoben durch mehr
-  # RAM) - CARGO_BUILD_JOBS=1 bleibt trotzdem als Sicherheitsmarge fuer
-  # schwaechere Zielhardware.
-  when: not _paru_bin.stat.exists
+- name: paru-Bootstrap + AUR-Pakete mit temporaerem NOPASSWD durchfuehren
+  # block/always statt einzelner Tasks: das NOPASSWD MUSS auch bei einem
+  # fehlschlagenden AUR-Build wieder entfernt werden - sonst wuerde ein
+  # Ansible-Task-Fehler die Play sofort abbrechen und das temporaere
+  # NOPASSWD dauerhaft offen stehen lassen.
   block:
-    - name: AUR-Quelle von paru klonen
-      become: true
-      become_user: "{{ restore_user }}"
-      ansible.builtin.git:
-        repo: https://aur.archlinux.org/paru.git
-        dest: "/home/{{ restore_user }}/.cache/aur-build/paru"
+    - name: Temporaeres NOPASSWD fuer AUR-Builds
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/99-ansible-aur-build
+        content: "{{ restore_user }} ALL=(ALL) NOPASSWD: ALL\n"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: "visudo -cf %s"
 
-    - name: paru bauen und installieren
+    - name: Pruefen ob paru schon installiert ist
+      ansible.builtin.stat:
+        path: /usr/bin/paru
+      register: _paru_bin
+
+    - name: paru aus AUR bauen (Bootstrap, sonst kein AUR-Helper verfuegbar)
+      # paru-bin (vorkompiliertes Paket) wurde hier testweise verwendet, um
+      # das OOM beim Quell-Build zu umgehen - live aber an einem
+      # ABI-Mismatch gescheitert ("libalpm.so.15: cannot open shared
+      # object file"), weil paru-bin gegen eine andere libalpm-Version
+      # gebaut ist als tatsaechlich installiert (Rolling-Release, Version
+      # kann jederzeit abweichen). Ein Quell-Build linkt dagegen immer
+      # exakt gegen die installierte libalpm. Das eigentliche OOM-Problem
+      # war die 4G-RAM-Test-VM (behoben durch mehr RAM) -
+      # CARGO_BUILD_JOBS=1 bleibt trotzdem als Sicherheitsmarge fuer
+      # schwaechere Zielhardware.
+      when: not _paru_bin.stat.exists
+      block:
+        - name: AUR-Quelle von paru klonen
+          become: true
+          become_user: "{{ restore_user }}"
+          ansible.builtin.git:
+            repo: https://aur.archlinux.org/paru.git
+            dest: "/home/{{ restore_user }}/.cache/aur-build/paru"
+
+        - name: paru bauen und installieren
+          become: true
+          become_user: "{{ restore_user }}"
+          environment:
+            CARGO_BUILD_JOBS: "1"
+          ansible.builtin.command:
+            cmd: makepkg -si --noconfirm --needed
+            chdir: "/home/{{ restore_user }}/.cache/aur-build/paru"
+            creates: /usr/bin/paru
+
+    - name: AUR-Pakete via paru installieren
       become: true
       become_user: "{{ restore_user }}"
-      environment:
-        CARGO_BUILD_JOBS: "1"
       ansible.builtin.command:
-        cmd: makepkg -si --noconfirm --needed
-        chdir: "/home/{{ restore_user }}/.cache/aur-build/paru"
-        creates: /usr/bin/paru
-
-- name: AUR-Pakete via paru installieren
-  become: true
-  become_user: "{{ restore_user }}"
-  ansible.builtin.command:
-    cmd: "paru -S --noconfirm --needed {{ aur_packages | join(' ') }}"
-  register: _paru_install
-  changed_when: "'there is nothing to do' not in _paru_install.stdout | lower"
-
-- name: Temporaeres AUR-Build-NOPASSWD wieder entfernen
-  ansible.builtin.file:
-    path: /etc/sudoers.d/99-ansible-aur-build
-    state: absent
+        cmd: "paru -S --noconfirm --needed {{ aur_packages | join(' ') }}"
+      register: _paru_install
+      changed_when: "'there is nothing to do' not in _paru_install.stdout | lower"
+  always:
+    - name: Temporaeres AUR-Build-NOPASSWD wieder entfernen
+      ansible.builtin.file:
+        path: /etc/sudoers.d/99-ansible-aur-build
+        state: absent
 
 - name: ZFS-Systemdienste aktivieren (zfs-utils erst hier oben installiert)
   ansible.builtin.systemd_service:

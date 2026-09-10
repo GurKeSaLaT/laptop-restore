@@ -7,24 +7,51 @@
     dest: "{{ dotfiles_dest }}"
     version: main
 
-# ./setup install ist grundsaetzlich interaktiv (Begruessung, Rueckfragen),
-# hat dafuer aber ein dokumentiertes "-f/--force" ("Force mode without any
-# confirm"): jede einzelne Abfrage im Skript ist konsequent mit
-# "case $ask in false) ...; *) read ...; esac" abgesichert, -f setzt
-# ask=false und ueberspringt sie alle sauber (im Quellcode verifiziert,
-# nicht geraten). "-s/--skip-sysupdate" verhindert ein redundantes
-# "sudo pacman -Syu" innerhalb des Skripts - roles/packages hat das System
-# bereits aktuell gehalten.
-#
-# Bewusst KEIN failed_when: false mehr: -f/-s deckt die bekannte, rein
-# interaktivitaetsbedingte Fehlerursache ab - schlaegt der Befehl trotzdem
-# fehl, ist das ein echtes Problem (fehlende Abhaengigkeit, kaputtes
-# PKGBUILD etc.) und soll den Lauf wie jede andere Rolle auch sauber
-# abbrechen, statt es nur als leicht zu uebersehende Warnung durchzuwinken.
-- name: dots-hyprland Setup ausfuehren (./setup install -f -s)
-  become: true
-  become_user: "{{ restore_user }}"
-  ansible.builtin.command:
-    cmd: ./setup install -f -s
-    chdir: "{{ dotfiles_dest }}"
-  changed_when: true
+- name: dots-hyprland Setup mit temporaerem NOPASSWD durchfuehren
+  # block/always statt einzelner Tasks: das NOPASSWD MUSS auch dann wieder
+  # entfernt werden, wenn ./setup install fehlschlaegt (kein
+  # failed_when: false mehr, siehe unten) - sonst wuerde ein einzelner
+  # Ansible-Task-Fehler die Play sofort abbrechen und das temporaere
+  # NOPASSWD dauerhaft offen stehen lassen.
+  block:
+    # ./setup install ruft intern "sudo_init_keepalive" auf (haelt waehrend
+    # des gesamten Laufs eine sudo-Sitzung offen) - ohne TTY kann sudo
+    # dafuer nicht interaktiv nach dem Passwort fragen ("a terminal is
+    # required to read the password"), live so gescheitert. Gleiches
+    # Muster wie beim AUR-Bootstrap in roles/packages.
+    - name: Temporaeres NOPASSWD fuer dots-hyprland-Setup
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/99-ansible-dotfiles-setup
+        content: "{{ restore_user }} ALL=(ALL) NOPASSWD: ALL\n"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    # ./setup install ist ausserdem grundsaetzlich interaktiv (Begruessung,
+    # Rueckfragen), hat dafuer aber ein dokumentiertes "-f/--force" ("Force
+    # mode without any confirm"): jede einzelne Abfrage im Skript ist
+    # konsequent mit "case $ask in false) ...; *) read ...; esac"
+    # abgesichert, -f setzt ask=false und ueberspringt sie alle sauber (im
+    # Quellcode verifiziert, nicht geraten). "-s/--skip-sysupdate"
+    # verhindert ein redundantes "sudo pacman -Syu" - roles/packages hat
+    # das System bereits aktuell gehalten.
+    #
+    # Bewusst KEIN failed_when: false: -f/-s deckt die bekannte, rein
+    # interaktivitaetsbedingte Fehlerursache ab - schlaegt der Befehl
+    # trotzdem fehl, ist das ein echtes Problem (fehlende Abhaengigkeit,
+    # kaputtes PKGBUILD etc.) und soll den Lauf wie jede andere Rolle auch
+    # sauber abbrechen, statt es nur als leicht zu uebersehende Warnung
+    # durchzuwinken.
+    - name: dots-hyprland Setup ausfuehren (./setup install -f -s)
+      become: true
+      become_user: "{{ restore_user }}"
+      ansible.builtin.command:
+        cmd: ./setup install -f -s
+        chdir: "{{ dotfiles_dest }}"
+      changed_when: true
+  always:
+    - name: Temporaeres dots-hyprland-Setup-NOPASSWD wieder entfernen
+      ansible.builtin.file:
+        path: /etc/sudoers.d/99-ansible-dotfiles-setup
+        state: absent
