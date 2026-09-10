@@ -22,10 +22,21 @@
   # Ansible-Task-Fehler die Play sofort abbrechen und das temporaere
   # NOPASSWD dauerhaft offen stehen lassen.
   block:
+    # Zusaetzlich zu "NOPASSWD: ALL" auch "Defaults:<user> !authenticate"
+    # setzen - eine reine NOPASSWD-Cmnd_Spec reicht bei "sudo -v" (ohne
+    # konkretes Kommando, z. B. von AUR-Helpern mit periodischem
+    # Credential-Keepalive genutzt) nicht zuverlaessig aus, solange
+    # parallel noch "%wheel ALL=(ALL:ALL) ALL" (roles/base_system,
+    # passwortpflichtig) fuer denselben User matcht. Live auf der
+    # Test-VM verifiziert (siehe ausfuehrlicher Kommentar in
+    # roles/dotfiles/tasks/main.yml, wo das als endlose "sudo -v"-
+    # Fehlschlagsschleife durch yays "--sudoloop" beobachtet wurde).
     - name: Temporaeres NOPASSWD fuer AUR-Builds
       ansible.builtin.copy:
         dest: /etc/sudoers.d/99-ansible-aur-build
-        content: "{{ restore_user }} ALL=(ALL) NOPASSWD: ALL\n"
+        content: |
+          {{ restore_user }} ALL=(ALL) NOPASSWD: ALL
+          Defaults:{{ restore_user }} !authenticate
         owner: root
         group: root
         mode: "0440"

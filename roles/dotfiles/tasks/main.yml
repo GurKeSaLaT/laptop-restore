@@ -14,15 +14,40 @@
   # Ansible-Task-Fehler die Play sofort abbrechen und das temporaere
   # NOPASSWD dauerhaft offen stehen lassen.
   block:
-    # ./setup install ruft intern "sudo_init_keepalive" auf (haelt waehrend
-    # des gesamten Laufs eine sudo-Sitzung offen) - ohne TTY kann sudo
-    # dafuer nicht interaktiv nach dem Passwort fragen ("a terminal is
-    # required to read the password"), live so gescheitert. Gleiches
-    # Muster wie beim AUR-Bootstrap in roles/packages.
+    # ./setup install haelt per "sudo_init_keepalive" (functions.sh) und
+    # yays eigenem "--sudoloop" (install-deps.sh, fuer Meta-Paket-Deps)
+    # waehrend des gesamten Laufs eine sudo-Sitzung im Hintergrund am
+    # Leben - beide per periodischem "sudo -v" (Credential-Validierung
+    # ohne konkretes Kommando).
+    #
+    # Live beobachtet: eine reine "user ALL=(ALL) NOPASSWD: ALL"-Regel
+    # (wie unten) reicht dafuer NICHT aus, obwohl sie fuer normale
+    # Befehlsausfuehrung (z. B. "sudo pacman ...") einwandfrei
+    # funktioniert ("sudo -n id" -> sofort erfolgreich ohne Passwort).
+    # "sudo -n -v" alleine schlug trotzdem staendig mit "a terminal is
+    # required to read the password" / "a password is required" fehl,
+    # per strace/Vergleichstests auf der Test-VM verifiziert: sudo
+    # scheint bei "-v" (kein konkretes Kommando zum Matchen) nicht
+    # zuverlaessig NUR die letzte matchende Cmnd_Spec (unsere NOPASSWD-
+    # Regel) heranzuziehen, wenn parallel noch eine passwortpflichtige
+    # Regel fuer denselben User existiert (hier: "%wheel ALL=(ALL:ALL)
+    # ALL" aus roles/base_system). Ergebnis: yays "--sudoloop"
+    # wiederholte "sudo -v" endlos alle ~60s, jedes Mal mit neuer
+    # Passwort-Lektion in der Ausgabe - keine interaktive Abfrage, die
+    # "yes e" haette beantworten koennen, sondern ein direkt
+    # fehlschlagender, non-interaktiver sudo-Aufruf.
+    #
+    # Fix: zusaetzlich "Defaults:<user> !authenticate" setzen - das
+    # deaktiviert die Passwortpflicht fuer den User global (unabhaengig
+    # von einzelnen Cmnd_Specs) und behebt genau dieses "-v"-Verhalten
+    # (live auf der Test-VM verifiziert: "sudo -n -v" danach exit 0,
+    # keine Ausgabe).
     - name: Temporaeres NOPASSWD fuer dots-hyprland-Setup
       ansible.builtin.copy:
         dest: /etc/sudoers.d/99-ansible-dotfiles-setup
-        content: "{{ restore_user }} ALL=(ALL) NOPASSWD: ALL\n"
+        content: |
+          {{ restore_user }} ALL=(ALL) NOPASSWD: ALL
+          Defaults:{{ restore_user }} !authenticate
         owner: root
         group: root
         mode: "0440"
@@ -57,11 +82,14 @@
       # x() in sdata/lib/functions.sh) fragt bei JEDEM fehlgeschlagenen
       # Befehl "Repeat/exit/ignore [R/e/i]" - OHNE $ask-Absicherung, -f
       # deckt das also NICHT ab. Ohne TTY liest das sofort EOF, Default
-      # ist "R" (repeat) -> live als endlose Wiederholungsschleife
-      # beobachtet (stundenlang haengend, kein Fortschritt). "yes e"
+      # ist "R" (repeat) -> koennte sonst endlos wiederholen. "yes e"
       # beantwortet jede solche Rueckfrage automatisch mit "e" (exit) -
       # ein echter Fehler bricht dann sofort sauber ab, statt endlos zu
-      # wiederholen.
+      # wiederholen. (Die tatsaechlich live beobachtete Endlosschleife
+      # war aber keine dieser interaktiven Abfragen, sondern yays
+      # "--sudoloop" mit fehlschlagendem "sudo -v" - siehe Kommentar
+      # beim NOPASSWD-Sudoers-Eintrag oben. "yes e" bleibt trotzdem als
+      # Absicherung fuer den echten x()-Fall bestehen.)
       #
       # ${PIPESTATUS[1]} statt pipefail: "yes" stirbt per SIGPIPE (non-zero
       # exit) sobald ./setup install durch ist, auch bei Erfolg - pipefail
