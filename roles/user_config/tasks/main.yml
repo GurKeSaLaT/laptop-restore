@@ -3,10 +3,29 @@
 # gleiche relative Struktur (siehe scripts/capture-config.sh). Leer, bis
 # das erste Mal etwas erfasst wurde - dann einfach eine wachsende Menge
 # an $HOME-Dateien, ohne dass diese Rolle selbst angepasst werden muss.
+#
+# Die "when:"-Absicherung prueft bewusst nur, ob roles/user_config/files/
+# als VERZEICHNIS existiert (nicht rekursiv nach Dateien darin) - git
+# trackt keine leeren Verzeichnisse, ein Fork dieses Repos, der
+# scripts/capture-config.sh nie ausgefuehrt hat, haette files/ also gar
+# nicht im Checkout, und "ansible.builtin.copy" wuerde mit "Source
+# directory does not exist" fehlschlagen. Live gefunden: ein
+# "lookup('fileglob', role_path + '/files/**', ...)" hier war fragil -
+# fand bei tief verschachtelten Dateien (z.B. .config/systemd/user/...)
+# faelschlich 0 Treffer und ueberspang den kompletten Deploy-Task
+# stillschweigend, OBWOHL echte, inzwischen erfasste Configs vorhanden
+# waren.
+- name: Pruefen, ob roles/user_config/files/ ueberhaupt existiert
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files"
+  delegate_to: localhost
+  become: false
+  register: _user_config_files_dir
+
 - name: Erfasste $HOME-Configs deployen
   ansible.builtin.copy:
     src: files/
     dest: "/home/{{ restore_user }}/"
     owner: "{{ restore_user }}"
     group: "{{ restore_user }}"
-  when: lookup('fileglob', role_path + '/files/**', wantlist=True) | length > 0
+  when: _user_config_files_dir.stat.exists and _user_config_files_dir.stat.isdir
