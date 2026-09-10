@@ -46,9 +46,20 @@
     - name: dots-hyprland Setup ausfuehren (./setup install -f -s)
       become: true
       become_user: "{{ restore_user }}"
-      ansible.builtin.command:
-        cmd: ./setup install -f -s
+      # ansible.builtin.command/shell geben ihre Ausgabe grundsaetzlich
+      # erst nach Abschluss des Befehls zurueck (siehe Kommentar in
+      # scripts/00-disk-and-base-install.sh) - fuer einen Befehl, der
+      # mehrere Minuten laufen kann, deshalb zusaetzlich per tee live in
+      # eine Datei spiegeln (Ansible bekommt trotzdem die volle Ausgabe,
+      # tee gibt sie ja auch weiter). Aus einer zweiten SSH-Session
+      # waehrenddessen mitlesbar:
+      #   tail -f /mnt/tmp/dots-hyprland-setup.log
+      # "set -o pipefail" + "executable: bash", damit der Exitcode von
+      # "./setup install" durchschlaegt und nicht der von tee.
+      ansible.builtin.shell:
+        cmd: "set -o pipefail; ./setup install -f -s 2>&1 | tee /tmp/dots-hyprland-setup.log"
         chdir: "{{ dotfiles_dest }}"
+        executable: /bin/bash
       changed_when: true
   always:
     - name: Temporaeres dots-hyprland-Setup-NOPASSWD wieder entfernen

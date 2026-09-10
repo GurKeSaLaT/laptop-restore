@@ -61,16 +61,28 @@
           become_user: "{{ restore_user }}"
           environment:
             CARGO_BUILD_JOBS: "1"
-          ansible.builtin.command:
-            cmd: makepkg -si --noconfirm --needed
+          # Live per tee nach /tmp/paru-build.log gespiegelt (mehrere
+          # Minuten Laufzeit, siehe roles/dotfiles fuer die ausfuehrliche
+          # Begruendung) - aus einer zweiten SSH-Session mitlesbar:
+          # tail -f /mnt/tmp/paru-build.log
+          ansible.builtin.shell:
+            cmd: "set -o pipefail; makepkg -si --noconfirm --needed 2>&1 | tee /tmp/paru-build.log"
             chdir: "/home/{{ restore_user }}/.cache/aur-build/paru"
             creates: /usr/bin/paru
+            executable: /bin/bash
 
     - name: AUR-Pakete via paru installieren
       become: true
       become_user: "{{ restore_user }}"
-      ansible.builtin.command:
-        cmd: "paru -S --noconfirm --needed {{ aur_packages | join(' ') }}"
+      # Live per tee nach /tmp/aur-packages-install.log gespiegelt (kann
+      # bei vielen Paketen/AUR-Builds lange laufen) - aus einer zweiten
+      # SSH-Session mitlesbar: tail -f /mnt/tmp/aur-packages-install.log
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          paru -S --noconfirm --needed {{ aur_packages | join(' ') }}
+          2>&1 | tee /tmp/aur-packages-install.log
+        executable: /bin/bash
       register: _paru_install
       changed_when: "'there is nothing to do' not in _paru_install.stdout | lower"
   always:
