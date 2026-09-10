@@ -28,7 +28,8 @@ Drei gängige Optionen, wähl eine (oder kombiniere):
 2. **Separater USB-Stick**, den du getrennt vom Laptop aufbewahrst — genau
    für den Fall gedacht, dass beides (Laptop *und* GitHub-Zugang) gleichzeitig
    weg sind. Eine Datei mit dem Passwort drauf, referenziert per
-   `--vault-password-file /media/usb/vault-pass.txt`.
+   `--vault-password-file /media/usb/vault-pass.txt` (bei
+   `scripts/00-disk-and-base-install.sh` kurz `-f /media/usb/vault-pass.txt`).
 
 3. **Passwort-Manager-CLI** (Bitwarden `bw`, 1Password `op`, …), verpackt in
    ein kleines ausführbares Skript, das den Wert auf stdout ausgibt:

@@ -12,7 +12,7 @@
 # destruktiven Schritte dann und haengt den vorhandenen Pool nur wieder
 # ein. Fuer einen komplett frischen Start trotzdem: --reset.
 #
-# Aufruf: sudo ./scripts/00-disk-and-base-install.sh [--reset] [ansible-playbook-Optionen...]
+# Aufruf: sudo ./scripts/00-disk-and-base-install.sh [--reset] [-f <vault-pass-datei>] [ansible-playbook-Optionen...]
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,14 +26,37 @@ fi
 
 STATE_FILE="/root/.laptop-restore-state"
 
-# --reset herausfiltern, bevor der Rest von "$@" spaeter an ansible-playbook
-# durchgereicht wird.
+# --reset und -f (Kurzform fuer ansible-playbooks "--vault-password-file")
+# herausfiltern/uebersetzen, bevor der Rest von "$@" spaeter an
+# ansible-playbook durchgereicht wird. "-f" braucht ein Wertargument (der
+# Pfad) - dafuer statt "for arg in "$@"" eine while/shift-Schleife ueber
+# die Positionsparameter, sonst laesst sich das Konsumieren des zweiten
+# Tokens nicht sauber abbilden.
+#
+# WICHTIG: "-f" bedeutet bei ansible-playbook selbst etwas anderes
+# (--forks) - deshalb hier explizit in die lange Form uebersetzen statt
+# einfach durchzureichen, sonst wuerde ansible-playbook es falsch
+# interpretieren.
 reset_requested=0
 remaining_args=()
-for arg in "$@"; do
-    case "$arg" in
-        --reset) reset_requested=1 ;;
-        *) remaining_args+=("$arg") ;;
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --reset)
+            reset_requested=1
+            shift
+            ;;
+        -f)
+            if [[ $# -lt 2 ]]; then
+                echo "FEHLER: -f braucht einen Pfad zur Vault-Passwort-Datei." >&2
+                exit 1
+            fi
+            remaining_args+=("--vault-password-file" "$2")
+            shift 2
+            ;;
+        *)
+            remaining_args+=("$1")
+            shift
+            ;;
     esac
 done
 set -- "${remaining_args[@]}"
