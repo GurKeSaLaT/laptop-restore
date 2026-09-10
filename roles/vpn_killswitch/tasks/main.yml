@@ -137,6 +137,21 @@
 # was aber eine laufende --user-systemd-Instanz braucht (im Chroot nicht
 # vorhanden) - der Symlink unter default.target.wants/ ist das, was
 # "enable" tatsaechlich anlegt, und funktioniert auch rein dateibasiert.
+- name: default.target.wants/-Verzeichnis fuer {{ restore_user }} sicherstellen
+  # Live gefunden: ohne dieses Verzeichnis schlaegt der Symlink-Task
+  # unten mit "src file does not exist" fehl - Ansibles "file"-Modul
+  # prueft die Existenz des (relativen) "src" ueber den LITERALEN Pfad
+  # "<dest-Verzeichnis>/../vpn-status-bar-patch.path", nicht ueber den
+  # aufgeloesten Zielpfad. Fehlt "default.target.wants/" als Verzeichnis,
+  # kann das Betriebssystem den ".."-Schritt nicht durchlaufen, obwohl
+  # die eigentliche Zieldatei (vpn-status-bar-patch.path, direkt
+  # daneben) laengst existiert.
+  ansible.builtin.file:
+    path: "/home/{{ restore_user }}/.config/systemd/user/default.target.wants"
+    state: directory
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+
 - name: VPN-Kill-Switch-Statussymbol-Patch (Bar-Icon) fuer {{ restore_user }} aktivieren
   ansible.builtin.file:
     src: ../vpn-status-bar-patch.path
