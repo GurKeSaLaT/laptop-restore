@@ -166,6 +166,20 @@
 # wiederherstellen (wie auf dem Referenzsystem, unter ~/.config statt
 # /etc/openvpn/client - daher auch keine ProtectHome-Problematik wie
 # beim oben deployten Haupt-VPN).
+- name: ~/.config/openvpn/ fuer {{ restore_user }} sicherstellen
+  # roles/user_config deployt ~/.config/openvpn/ NIE (die echten
+  # Original-Dateien wurden bewusst nicht per capture-config.sh erfasst,
+  # siehe Kommentar oben zu vault_vpn_bridge_nb/-rpi) - das Verzeichnis
+  # existiert also sonst nirgends. "ansible.builtin.copy" mit "content:"
+  # legt fehlende Zielverzeichnisse (anders als bei "src:" auf eine
+  # vorhandene Quelldatei) nicht automatisch an - live so gescheitert
+  # ("Destination directory ... does not exist").
+  ansible.builtin.file:
+    path: "/home/{{ restore_user }}/.config/openvpn"
+    state: directory
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+
 - name: Referenz-Zugangsdaten fuer weitere VPN-Verbindungen (andere Geraete) deployen
   # Bewusst optional (default('') + when) statt vorausgesetzt - nicht
   # jeder, der dieses (oeffentliche) Repo als Vorlage nutzt, hat exakt
