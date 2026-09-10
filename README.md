@@ -159,8 +159,10 @@ git config core.hooksPath scripts/git-hooks
   gebraucht.
 - WLAN-Passwörter für Gast-/Hotel-Netzwerke mit Captive Portal — wechseln
   ohnehin ständig, bewusst nicht automatisiert.
-- Alles, was `end-4/dots-hyprland`s `./setup install` selbst an
-  Nutzerkonfiguration abfragt (läuft interaktiv beim ersten Dotfiles-Setup).
+- Optionale Theme-/Font-Feinauswahl von `end-4/dots-hyprland`s eigenem
+  `./setup install` jenseits der Standard-Optionen — läuft per `-f`
+  (Force-Mode, alle Rückfragen übersprungen) automatisch mit sinnvollen
+  Defaults durch, siehe `docs/NOT_COVERED.md`.
 
 ## Repo-Struktur
 

@@ -8,10 +8,15 @@
 - **WLAN-Passwörter für Gast-/Hotel-Netzwerke** — Struktur in
   `group_vars/all/vault.yml.example` vorbereitet (`vault_wifi_networks`),
   aber die echten SSIDs/PSKs kennt nur du.
-- **`./setup install`-Interaktion der end-4-Dotfiles** — das Skript fragt
-  beim ersten Lauf u. U. selbst Dinge ab (Theme-Auswahl etc.). Das Playbook
-  ruft es non-interaktiv auf; falls es doch nachfragt, einmal manuell im
-  chroot nachholen.
+- **`./setup install`-Interaktion der end-4-Dotfiles** — grundsaetzlich
+  geloest: `roles/dotfiles` ruft es mit `-f` (offizielles "Force mode
+  without any confirm"-Flag, im Quellcode verifiziert) und `-s`
+  (`--skip-sysupdate`, kein redundantes `pacman -Syu`) auf. Falls es
+  trotzdem fehlschlaegt (z. B. durch ein neues, noch nicht durch `-f`
+  abgedecktes Prompt in einer kuenftigen dots-hyprland-Version), zeigt
+  `roles/dotfiles` eine Warnung mit dem Exit-Code statt den ganzen Lauf
+  abzubrechen - einmalig manuell (ohne `-f`, um die Fehlermeldung zu sehen)
+  nachholen: `su - <user> -c 'cd ~/.cache/dots-hyprland && ./setup install'`.
 - **SSH-Keys, GPG-Keys, Browser-Profile, Steam/Spiele-Library** und
   ähnliches nutzerspezifisches `$HOME`-Gedöns — außerhalb des Scopes eines
   System-Restore-Playbooks. Eigenes Backup (z. B. Restic/Borg) empfohlen,
