@@ -24,3 +24,34 @@
     regexp: '^(\s*)kb_layout = ".*",'
     line: '\1kb_layout = "{{ hypr_kb_layout }}",'
     backrefs: true
+
+# gtk_color_scheme/-theme_name (group_vars/all/vars.yml) leben nur in dconf,
+# nicht in einer von capture-config.sh erfassbaren Textdatei. "gsettings"/
+# "dconf write" braucht einen D-Bus-Session-Bus, den es im Ansible-Chroot
+# nicht gibt (live geprueft: color-scheme blieb nach einem frischen Restore
+# auf dem GNOME-Default "prefer-light" haengen statt der eigentlichen
+# Praeferenz) - deshalb per systemd --user Oneshot-Unit erst beim ersten
+# echten Login (WantedBy=default.target) angewendet, analog zum
+# vpn-status-bar-patch-Mechanismus in roles/vpn_killswitch.
+- name: ~/.config/systemd/user/ fuer {{ restore_user }} sicherstellen
+  ansible.builtin.file:
+    path: "/home/{{ restore_user }}/.config/systemd/user/default.target.wants"
+    state: directory
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+
+- name: restore-color-scheme.service deployen
+  ansible.builtin.template:
+    src: restore-color-scheme.service.j2
+    dest: "/home/{{ restore_user }}/.config/systemd/user/restore-color-scheme.service"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0644"
+
+- name: restore-color-scheme.service aktivieren (Symlink statt "systemctl --user enable", siehe Kommentar in roles/vpn_killswitch)
+  ansible.builtin.file:
+    src: ../restore-color-scheme.service
+    dest: "/home/{{ restore_user }}/.config/systemd/user/default.target.wants/restore-color-scheme.service"
+    state: link
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"

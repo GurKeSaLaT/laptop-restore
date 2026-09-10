@@ -35,6 +35,16 @@ hypr_kb_layout: de
 dotfiles_repo: https://github.com/end-4/dots-hyprland
 dotfiles_dest: "/home/{{ restore_user }}/.cache/dots-hyprland"
 
+# GTK/GNOME hell/dark-Modus-Praeferenz (org.gnome.desktop.interface). Lebt
+# NUR in dconf (eine binaere ~/.config/dconf/user-Datenbank), nicht in
+# irgendeiner von capture-config.sh erfassbaren Textdatei unter ~/.config -
+# deshalb hier als eigene Variable, statt sich auf die generische
+# Config-Erfassung zu verlassen. Siehe roles/hyprland fuer die Anwendung
+# (per systemd --user Oneshot-Unit beim ersten echten Login, da chroot
+# keinen D-Bus/Session-Bus fuer "gsettings"/"dconf write" hat).
+gtk_color_scheme: prefer-dark
+gtk_theme_name: adw-gtk3-dark
+
 # --- SSH ---
 # Nur Public-Key-Auth, kein Passwort-Login (siehe roles/ssh). Der private
 # Schluessel liegt NICHT in diesem Repo - wurde einmalig generiert und dem

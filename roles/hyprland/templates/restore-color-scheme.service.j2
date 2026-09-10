@@ -1,0 +1,10 @@
+[Unit]
+Description=Restore GNOME color-scheme/gtk-theme (dark/light) preference after a fresh restore
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/gsettings set org.gnome.desktop.interface color-scheme '{{ gtk_color_scheme }}'
+ExecStart=/usr/bin/gsettings set org.gnome.desktop.interface gtk-theme '{{ gtk_theme_name }}'
+
+[Install]
+WantedBy=default.target
