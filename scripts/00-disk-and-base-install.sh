@@ -413,12 +413,31 @@ for arg in "$@"; do
     esac
 done
 
+# Ausgabe zusaetzlich in eine Datei spiegeln (per tee, weiterhin live im
+# Terminal sichtbar) - damit sich der Lauf aus einer ZWEITEN SSH-Session
+# per "tail -f" mitlesen laesst, unabhaengig davon ob/wann die aktuelle
+# Session abbricht (das ansible-playbook laeuft selbst als Hintergrund-
+# Prozess weiter, live so beobachtet - nur die Sicht darauf ging mit der
+# Session verloren). Ueberschreibt bei jedem Aufruf neu (nicht -a), da ein
+# neuer Aufruf ohnehin i.d.R. an derselben Stelle fortsetzt (Resume).
+ANSIBLE_LOG=/root/laptop-restore-ansible.log
+echo "--- Ansible-Ausgabe zusaetzlich nach $ANSIBLE_LOG gespiegelt (2. SSH-Session: tail -f $ANSIBLE_LOG) ---"
+
 # disk_device explizit ueberschreiben: group_vars/all/vars.yml enthaelt nur
 # einen Default-Vorschlag (echte Hardware), das tatsaechliche Ziel wurde
 # oben interaktiv ausgewaehlt (oder aus dem Marker uebernommen).
+#
+# set +e/-e um den Aufruf herum: unter set -e wuerde ein fehlschlagender
+# ansible-playbook-Lauf das Skript SOFORT an dieser Stelle beenden (der
+# Trap greift zwar noch, aber "status=$?" und die Erfolg/Fehler-Meldung
+# darunter wurden dadurch nie erreicht - ein bestehender Bug, hier
+# mitgefixt). PIPESTATUS[0] statt $? direkt, weil $? nach einer Pipe sonst
+# den Exitcode von "tee" liefern wuerde, nicht von ansible-playbook.
+set +e
 ansible-playbook -i inventory/chroot.ini site.yml "${vault_args[@]}" "${verbosity_args[@]}" \
-    -e "disk_device=${DISK_DEVICE}" "$@"
-status=$?
+    -e "disk_device=${DISK_DEVICE}" "$@" 2>&1 | tee "$ANSIBLE_LOG"
+status=${PIPESTATUS[0]}
+set -e
 
 echo
 if [[ $status -eq 0 ]]; then
