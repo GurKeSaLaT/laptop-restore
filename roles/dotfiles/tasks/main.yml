@@ -15,6 +15,12 @@
 # nicht geraten). "-s/--skip-sysupdate" verhindert ein redundantes
 # "sudo pacman -Syu" innerhalb des Skripts - roles/packages hat das System
 # bereits aktuell gehalten.
+#
+# Bewusst KEIN failed_when: false mehr: -f/-s deckt die bekannte, rein
+# interaktivitaetsbedingte Fehlerursache ab - schlaegt der Befehl trotzdem
+# fehl, ist das ein echtes Problem (fehlende Abhaengigkeit, kaputtes
+# PKGBUILD etc.) und soll den Lauf wie jede andere Rolle auch sauber
+# abbrechen, statt es nur als leicht zu uebersehende Warnung durchzuwinken.
 - name: dots-hyprland Setup ausfuehren (./setup install -f -s)
   become: true
   become_user: "{{ restore_user }}"
@@ -22,14 +28,3 @@
     cmd: ./setup install -f -s
     chdir: "{{ dotfiles_dest }}"
   changed_when: true
-  register: _dotfiles_setup
-  failed_when: false
-
-- name: Warnung falls ./setup install trotzdem fehlschlug
-  ansible.builtin.debug:
-    msg: >-
-      ./setup install -f -s ist mit Exit {{ _dotfiles_setup.rc }}
-      fehlgeschlagen. Manuell nachholen:
-      su - {{ restore_user }} -c 'cd {{ dotfiles_dest }} && ./setup install'
-      (ohne -f, um die genaue Fehlermeldung interaktiv zu sehen)
-  when: _dotfiles_setup.rc is defined and _dotfiles_setup.rc != 0
