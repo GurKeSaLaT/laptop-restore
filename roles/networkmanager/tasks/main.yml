@@ -8,12 +8,14 @@
     mode: "0644"
 
 - name: Bekannte WLANs aus vault.yml anlegen
+  # wifi_sec erwartet in der hier installierten community.general-Version
+  # ein Dict mit den rohen nmcli-Properties (key-mgmt/psk), keinen simplen
+  # String - live mit "argument 'wifi_sec' is of type str" gescheitert.
   community.general.nmcli:
     type: wifi
     conn_name: "{{ item.ssid }}"
     ssid: "{{ item.ssid }}"
-    wifi_sec: "{{ 'wpa-psk' if item.psk | default('') | length > 0 else omit }}"
-    psk: "{{ item.psk if item.psk | default('') | length > 0 else omit }}"
+    wifi_sec: "{{ {'key-mgmt': 'wpa-psk', 'psk': item.psk} if item.psk | default('') | length > 0 else omit }}"
     autoconnect: true
     state: present
   loop: "{{ vault_wifi_networks | default([]) }}"
