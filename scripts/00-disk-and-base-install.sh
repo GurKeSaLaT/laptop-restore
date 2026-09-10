@@ -12,7 +12,9 @@
 # destruktiven Schritte dann und haengt den vorhandenen Pool nur wieder
 # ein. Fuer einen komplett frischen Start trotzdem: --reset.
 #
-# Aufruf: sudo ./scripts/00-disk-and-base-install.sh [--reset] [-f <vault-pass-datei>] [ansible-playbook-Optionen...]
+# Aufruf: sudo ./scripts/00-disk-and-base-install.sh [--reset] [-f <vault-pass-datei>] [--disk <geraet>] [ansible-playbook-Optionen...]
+# "--disk" ueberspringt die interaktive Laufwerksauswahl (z.B. --disk /dev/vda) -
+# noetig fuer unbeaufsichtigte Laeufe ohne TTY.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -38,12 +40,24 @@ STATE_FILE="/root/.laptop-restore-state"
 # einfach durchzureichen, sonst wuerde ansible-playbook es falsch
 # interpretieren.
 reset_requested=0
+disk_device_override=""
 remaining_args=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --reset)
             reset_requested=1
             shift
+            ;;
+        --disk)
+            # Ueberspringt die interaktive Laufwerksauswahl weiter unten -
+            # fuer unbeaufsichtigte/automatisierte Laeufe (z.B. per SSH
+            # ohne TTY), wo "read" sonst sofort auf EOF laeuft.
+            if [[ $# -lt 2 ]]; then
+                echo "FEHLER: --disk braucht ein Zielgeraet (z.B. /dev/vda)." >&2
+                exit 1
+            fi
+            disk_device_override="$2"
+            shift 2
             ;;
         -f)
             if [[ $# -lt 2 ]]; then
@@ -255,7 +269,16 @@ select_disk() {
 }
 
 if [[ $resume -eq 0 ]]; then
-    select_disk
+    if [[ -n "$disk_device_override" ]]; then
+        DISK_DEVICE="$disk_device_override"
+        if [[ ! -b "$DISK_DEVICE" ]]; then
+            echo "FEHLER: --disk $DISK_DEVICE ist kein Blockgeraet." >&2
+            exit 1
+        fi
+        echo "--- Ziel-Laufwerk per --disk vorgegeben: $DISK_DEVICE ---"
+    else
+        select_disk
+    fi
 fi
 
 # Partitions-Suffix: Geraete, deren Name auf eine Ziffer endet (nvme0n1,
