@@ -6,42 +6,47 @@
 # Dotfiles, Configs - alles) wurde stattdessen unbemerkt direkt auf dem
 # Root-Dataset angelegt, das separate Home-Dataset blieb leer.
 #
-# scripts/00-disk-and-base-install.sh prueft/repariert das schon einmal
-# auf dem Live-System, UNMITTELBAR bevor dieser Ansible-Lauf startet -
-# live trotzdem noch als "Race" beobachtet, und ENDLICH root-caused: kein
-# Timing-Problem, sondern ZFS' eigene interne "mounted"-Buchfuehrung
-# geraet aus dem Tritt mit der tatsaechlichen Kernel-Mount-Tabelle. Live
-# gesehen: "zfs mount mappepool/home" schlug mit "cannot mount
-# 'mappepool/home': filesystem already mounted" fehl - ZFS selbst glaubt
-# also, es sei schon gemountet -, waehrend "mountpoint -q" (liest die
-# ECHTE Kernel-Mount-Tabelle) das Gegenteil sagt. Vermutlich Ueberrest
-# mehrerer zpool import/export-Zyklen ueber mehrere Testlaeufe/VM-Neustarts
-# hinweg. Standard-Fix fuer genau diesen ZFS-Zustand: einmal erzwungen
-# aushaengen (harmlose No-Op, falls wirklich nichts gemountet ist - setzt
-# ZFS' interne Buchfuehrung zurueck), dann erst mounten.
+# Endgueltige Root-Ursache (per /proc/self/mountinfo verifiziert, siehe
+# ausfuehrlicher Kommentar in scripts/00-disk-and-base-install.sh): "zfs
+# mount" fuer das Home-Dataset lief mal zu einem Zeitpunkt, an dem der
+# Root-Dataset noch NICHT unter /mnt gemountet war - der Home-Mount haengt
+# sich dann an den damaligen Pfad /mnt (ein simples Verzeichnis auf dem
+# Live-System), nicht an den spaeter dort gemounteten Root-Dataset-Mount.
+# Ergebnis: als GESCHWISTER- statt KIND-Mount im Kernel-Mount-Baum haengen
+# geblieben - vom Live-System aus unter /mnt/home weiterhin ganz normal
+# erreichbar (deshalb taeuschend unauffaellig), aber von INNERHALB eines
+# chroot(/mnt) aus (wie Ansibles "chroot"-Connection-Plugin es macht)
+# komplett unsichtbar.
 #
+# "mountpoint" ist dafuer KEIN verlaesslicher Pruef-Befehl: ZFS vergibt
+# Datasets aus demselben Pool teils dieselbe Geraetenummer (st_dev) wie
+# ihr Eltern-Dataset - "mountpoint"s klassischer st_dev-Vergleich zwischen
+# Pfad und Elternverzeichnis liefert dafuer live nachweislich falsche
+# Ergebnisse. "findmnt" liest stattdessen die echte Kernel-Mount-Tabelle
+# (/proc/self/mountinfo) und ist davon nicht betroffen.
+#
+# Fix: UNBEDINGT (nicht nur "falls nicht gemountet" - "sieht gemountet
+# aus" ist ja genau das truegerische Symptom) erst sicherstellen, dass
+# Root gemountet ist, dann Home erzwungen aus- und neu einhaengen, damit
+# es sich garantiert an den jetzt korrekt gemounteten Root-Dataset haengt.
 # "zfs" kann dafuer nicht IM Ziel-Chroot laufen (das hat an diesem
 # fruehen Punkt noch kein zfs-utils installiert, kommt erst aus
 # roles/packages - "No such file or directory" live so gesehen) -
 # "delegate_to: localhost" fuehrt den Befehl stattdessen auf dem
 # Ansible-Controller aus, also dem Live-System selbst, das zfs
-# garantiert bootstrapped hat.
-- name: Pruefen, ob /home korrekt als eigenes Dataset gemountet ist
-  ansible.builtin.command: mountpoint -q /home
-  register: _home_mountpoint_check
-  failed_when: false
-  changed_when: false
-
-- name: /home auf dem Live-System (Ansible-Controller) aus-/nachmounten, falls (noch) nicht gemountet
+# garantiert bootstrapped hat. scripts/00-disk-and-base-install.sh macht
+# denselben Fix schon einmal auf dem Live-System, unmittelbar bevor
+# dieser Ansible-Lauf startet - hier nur noch als letzte Absicherung.
+- name: /home auf dem Live-System (Ansible-Controller) korrekt (neu) mounten
   ansible.builtin.shell: |
     set -e
-    zfs unmount -f {{ zpool_name }}/home 2>/dev/null || true
-    zfs mount {{ zpool_name }}/home
+    mountpoint -q /mnt || zfs mount {{ root_dataset }}
+    zfs unmount -f {{ home_dataset }} 2>/dev/null || true
+    zfs mount {{ home_dataset }}
   delegate_to: localhost
-  when: _home_mountpoint_check.rc != 0
 
-- name: Sicherstellen, dass /home jetzt korrekt gemountet ist
-  ansible.builtin.command: mountpoint -q /home
+- name: Sicherstellen, dass /home jetzt korrekt im Mount-Baum haengt
+  ansible.builtin.command: findmnt /home
   changed_when: false
 
 - name: Hostname setzen

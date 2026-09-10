@@ -303,8 +303,22 @@ trap cleanup EXIT
 
 if [[ $resume -eq 1 ]]; then
     echo "--- Vorhandenen Pool wieder einhaengen ---"
+    # "-N": zpool import mountet sonst von sich aus JEDES Dataset mit
+    # canmount=on automatisch WAEHREND des Imports - noch bevor die
+    # naechste Zeile unten $ROOT_DATASET (bewusst canmount=noauto, genau
+    # damit "zpool import" es NICHT automatisch mountet) explizit mountet.
+    # $HOME_DATASET hat canmount=on (Default, nie ueberschrieben) und
+    # wurde dadurch live so gemountet, WAEHREND /mnt noch ein simples
+    # Live-System-Verzeichnis war (Root ja erst danach gemountet) - haengt
+    # sich dann als GESCHWISTER- statt KIND-Mount von Root im Kernel-
+    # Mount-Baum auf, unsichtbar/unerreichbar von einem chroot(/mnt) aus.
+    # Root-Ursache des seit Tagen verfolgten "/home"-Mount-Problems, per
+    # /proc/self/mountinfo (Parent-Mount-IDs verglichen) verifiziert.
+    # "-N" unterbindet das automatische Mounten komplett - danach
+    # bestimmen ausschliesslich die beiden folgenden Zeilen die
+    # Mount-Reihenfolge (Root zuerst, Home per "zfs mount -a" danach).
     if ! zpool list -H "$ZPOOL_NAME" >/dev/null 2>&1; then
-        zpool import -f -R /mnt "$ZPOOL_NAME"
+        zpool import -f -N -R /mnt "$ZPOOL_NAME"
     fi
     if [[ "$(zfs get -H -o value mounted "$ROOT_DATASET" 2>/dev/null)" != "yes" ]]; then
         zfs mount "$ROOT_DATASET"
@@ -397,31 +411,52 @@ if [[ -d /sys/firmware/efi/efivars ]]; then
     mount --rbind /sys/firmware/efi/efivars /mnt/sys/firmware/efi/efivars
 fi
 
-# Letzte Absicherung: /mnt/home MUSS an dieser Stelle das eigene
-# ZFS-Dataset sein, nicht der leere Ordner auf dem Root-Dataset - sonst
-# landet der komplette Home-Ordner des Zielsystems (SSH-Key, Dotfiles,
-# Configs) unbemerkt auf dem Root-Dataset (live so erlebt). Root-Ursache
-# mittlerweile gefunden: kein Timing-Problem, sondern ZFS' eigene interne
-# "mounted"-Buchfuehrung geraet aus dem Tritt mit der tatsaechlichen
-# Kernel-Mount-Tabelle - "zfs mount" schlaegt dann mit "cannot mount
-# ...: filesystem already mounted" fehl, obwohl "mountpoint -q" (liest
-# die ECHTE Kernel-Mount-Tabelle) das Gegenteil sagt. Deshalb erst
-# erzwungen aushaengen (harmlose No-Op, falls wirklich nichts gemountet
-# ist - setzt ZFS' interne Buchfuehrung zurueck), dann erst mounten.
-# roles/base_system hat denselben Fix (dort per "delegate_to: localhost",
-# da das Zielsystem an dem Punkt noch kein zfs-utils hat) als letzte
-# Absicherung - hier soll es idealerweise schon gar nicht mehr noetig sein.
-if ! mountpoint -q /mnt/home; then
-    echo "--- WARNUNG: /mnt/home ist (noch) kein eigener Mountpoint - versuche nachzumounten ---" >&2
-    zfs list -o name,mounted,mountpoint "$ZPOOL_NAME" "$HOME_DATASET" >&2 || true
-    mount | grep -E ' /mnt(/| )' >&2 || true
-    zfs unmount -f "$HOME_DATASET" 2>/dev/null || true
-    zfs mount "$HOME_DATASET"
-    if ! mountpoint -q /mnt/home; then
-        echo "FEHLER: /mnt/home immer noch kein Mountpoint nach 'zfs mount ${HOME_DATASET}'." >&2
-        exit 1
-    fi
-    echo "--- /mnt/home erfolgreich nachgemountet ---"
+# /mnt/home MUSS an dieser Stelle korrekt ALS KIND-Mount von /mnt im
+# Kernel-Mount-Baum haengen, nicht nur irgendwie am Pfad /mnt/home
+# erreichbar sein - sonst landet der komplette Home-Ordner des
+# Zielsystems (SSH-Key, Dotfiles, Configs) unbemerkt auf dem Root-Dataset
+# (live so erlebt). Endgueltige Root-Ursache (per /proc/self/mountinfo
+# verifiziert): "zfs mount" fuer HOME_DATASET lief zu einem Zeitpunkt, an
+# dem /mnt (ROOT_DATASET) noch NICHT dort gemountet war - der Home-Mount
+# haengt sich dann an den PFAD /mnt, wie er zu dem Zeitpunkt existierte
+# (ein simples Verzeichnis auf dem Live-System selbst), nicht an den
+# spaeter dort gemounteten Root-Dataset-Mount. Linux haengt bestehende
+# Unter-Mounts NICHT automatisch um, wenn spaeter etwas Neues auf ihren
+# Eltern-Pfad gemountet wird - der Home-Mount bleibt als GESCHWISTER-
+# statt KIND-Mount des Root-Datasets haengen, unterhalb des jetzt
+# verdeckten alten Pfads. Ergebnis: vom Live-System aus ganz normal unter
+# /mnt/home erreichbar (deshalb taeuschend unauffaellig), aber von
+# INNERHALB eines chroot(/mnt) aus (wie Ansibles "chroot"-Connection-
+# Plugin es macht) komplett unsichtbar - "mountpoint"/"findmnt"/simple
+# Verzeichnis-Listings zeigen dort nichts. Kann durch mehrfache
+# zpool-import/export-Zyklen ueber mehrere Testlaeufe/VM-Neustarts
+# entstehen (z.B. Resume-Pfad, bei dem Root bereits als gemountet gilt
+# und "zfs mount ROOT_DATASET" uebersprungen wird, waehrend Home aus
+# irgendeinem fruehen Zustand heraus schon existierte).
+#
+# Fix: explizit sicherstellen, dass /mnt (Root) VOR /mnt/home (Home)
+# gemountet ist, UND Home danach zwingend neu mounten (erzwungenes
+# Aushaengen zuerst - harmlose No-Op, falls nichts/falsch gemountet war -
+# dann Neu-Mount), damit es sich garantiert an den jetzt korrekt
+# gemounteten Root-Dataset haengt. Bewusst UNBEDINGT, nicht nur "falls
+# noch nicht gemountet" - genau dieser falsche Eindruck ("ist doch schon
+# gemountet") war ja das eigentliche Problem.
+#
+# "mountpoint" wird hier bewusst NICHT mehr zur Pruefung benutzt: ZFS
+# vergibt Datasets aus demselben Pool teils dieselbe Geraetenummer (st_dev)
+# wie ihr Eltern-Dataset - "mountpoint"s klassischer st_dev-Vergleich
+# zwischen Pfad und Elternverzeichnis liefert dafuer live nachweislich
+# falsche Ergebnisse (meldet "kein Mountpoint", obwohl es echt gemountet
+# war). "findmnt" liest stattdessen die echte Kernel-Mount-Tabelle
+# (/proc/self/mountinfo) und ist davon nicht betroffen.
+mountpoint -q /mnt || zfs mount "$ROOT_DATASET"
+zfs unmount -f "$HOME_DATASET" 2>/dev/null || true
+zfs mount "$HOME_DATASET"
+if ! findmnt /mnt/home >/dev/null; then
+    echo "FEHLER: /mnt/home haengt nach dem Neu-Mount immer noch nicht korrekt im Mount-Baum." >&2
+    zfs list -o name,mounted,mountpoint "$ZPOOL_NAME" "$ROOT_DATASET" "$HOME_DATASET" >&2 || true
+    grep -E ' /mnt(/| )' /proc/self/mountinfo >&2 || true
+    exit 1
 fi
 
 # Ab hier gilt Stufe 0 als abgeschlossen - Marker schreiben, damit ein
