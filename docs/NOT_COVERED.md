@@ -1,8 +1,9 @@
 # Bewusst nicht automatisiert
 
-- **Alte NetworkManager-VPN-Verbindung `normal-1194-udp`** (UUID
-  `ed3ac1b0-8c61-4f31-8237-a219ccdd515d`) mit im GNOME-Keyring
-  gespeichertem Passwort. Wird laut `~/config/vpn-auto-connect.md` von der
+- **Alte NetworkManager-VPN-Verbindung `normal-1194-udp`** (eigene UUID pro
+  System, siehe `nmcli connection show normal-1194-udp` auf dem
+  Referenzsystem) mit im GNOME-Keyring gespeichertem Passwort. Wird laut
+  `~/config/vpn-auto-connect.md` von der
   aktuellen Automatik (systemd-Service + Kill-Switch) nicht mehr benutzt.
   Falls du sie doch brauchst: manuell in NetworkManager neu anlegen.
 - **WLAN-Passwörter für Gast-/Hotel-Netzwerke** — Struktur in

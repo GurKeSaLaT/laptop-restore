@@ -12,8 +12,9 @@ sehen. GitHub-Secrets lösen ein anderes Problem (CI-Pipelines), nicht
 
 - Alle Geheimnisse leben in `group_vars/all/vault.yml`, **verschlüsselt**
   mit `ansible-vault`. Der Chiffretext ist git-versioniert und darf
-  öffentlich sein (ist es hier ohnehin nicht, Repo ist privat) — er ist ohne
-  Passwort wertlos.
+  öffentlich sein (dieses Repo ist es tatsächlich, siehe GitHub) — er ist
+  ohne Passwort wertlos. Neue Secrets deshalb IMMER hier rein, nie als
+  Klartext-Datei/Variable irgendwo sonst im Repo.
 - Das Vault-**Passwort** selbst ist der einzige verbleibende Single Point of
   Failure und liegt **nie** im Repo.
 

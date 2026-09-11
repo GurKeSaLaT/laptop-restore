@@ -1,4 +1,3 @@
-interface = wlp108s0
 cisco_mac = off
 sort_order = chan/sig
 sort_ascending = off

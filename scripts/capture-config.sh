@@ -103,6 +103,17 @@ if [[ "${1:-}" == "--auto" ]]; then
             *[Cc]ookie*|*[Tt]oken*|lock|*.sqlite|*.sqlite3|*.db|*.log|"Network Persistent State"|Preferences|DIPS|SharedStorage|TransportSecurity|*.pid|*.sock|recently-used.xbel|QuotaManager|LOCK|CURRENT|MANIFEST-*)
                 continue ;;
         esac
+        # Wiresharks "recent"/"recent_common": laut eigenem Dateikopf "regenerated
+        # each time Wireshark is quit" - reiner Laufzeitzustand, keine bewusste
+        # Konfiguration. Live gefunden: enthielt echte IPs/MAC/WLAN-SSID aus einer
+        # frueheren Capture-Session (recent.capture_file/-display_filter-Zeilen) -
+        # deshalb per exaktem Pfad (nicht per Basename, um z.B. "dfilters"/
+        # "colorfilters" im selben Verzeichnis weiter erfassbar zu lassen) statt
+        # per genereller Verzeichnis-Sperre ausgeschlossen.
+        case "$rf" in
+            "$HOME/.config/wireshark/recent"|"$HOME/.config/wireshark/recent_common")
+                continue ;;
+        esac
         [[ "$rf" =~ /($prune_dirs)/ ]] && continue
         if [[ -z "${installed_set[$rf]+x}" ]]; then
             capture_path "$rf"
