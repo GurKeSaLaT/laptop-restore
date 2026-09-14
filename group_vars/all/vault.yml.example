@@ -90,6 +90,25 @@ vault_ssh_client_keys:
   wifi_pi: |
     # CHANGE-ME: Inhalt von ~/.ssh/wifi_pi hier einfuegen.
 
+# ZFS-Backup (Laptop -> Home-Server, derselbe wie "home_server" in
+# roles/ssh_client, siehe roles/backup). Private LAN-IP/Hostname des
+# Servers - verraet Netzwerkstruktur.
+vault_laptop_backup_remote_host: "CHANGE-ME"
+
+# Dedizierter, passphrase-loser SSH-Key NUR fuer den Backup-Sync (nicht der
+# persoenliche SSH-Key des Nutzers, siehe vault_ssh_client_keys oben) -
+# liegt unter /etc/backup-ssh/, nicht ~/.ssh/, da er von einem root-
+# laufenden systemd-Timer benutzt wird, nicht interaktiv vom Nutzer.
+vault_laptop_backup_ssh_key: |
+  # CHANGE-ME: Inhalt des dedizierten Backup-SSH-Private-Keys hier einfuegen.
+
+# Gepinnter Host-Key des Backup-Servers (Format wie in known_hosts:
+# "<host-oder-ip> <typ> <key>") - bewusst FEST hinterlegt statt Trust-on-
+# first-use, da der Sync unbeaufsichtigt per Timer laeuft.
+vault_laptop_backup_known_hosts: |
+  # CHANGE-ME, z.B. (192.0.2.10 = RFC 5737 TEST-NET-1, eindeutig fiktiv):
+  # 192.0.2.10 ssh-ed25519 AAAA...
+
 # WLAN-Netzwerke, die NetworkManager nach dem Restore automatisch kennen
 # soll. Nur das eigene Heimnetz wird automatisch angelegt - Gast-/Hotel-
 # WLANs mit Captive Portal bewusst NICHT, die wechseln ohnehin staendig

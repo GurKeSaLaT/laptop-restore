@@ -146,6 +146,16 @@ git config core.hooksPath scripts/git-hooks
   `vault_ssh_known_hosts_extra`), nicht in dieser Doku.
 - Das eigene Heimnetz-WLAN wird automatisch angelegt (`vault_wifi_networks`
   — SSID/PSK liegen verschlüsselt im Vault, nicht in dieser Doku).
+- **ZFS-Backup auf den Home-Server** (`roles/backup`): `sanoid` snapshottet
+  lokal (`hourly`/`daily`/`monthly`), `syncoid` repliziert per Timer alle
+  30 Min. auf den Server, aber nur wenn `roles/vpn_killswitch` bestätigt,
+  dass der Laptop wirklich im Heimnetz ist. Eigene Kind-Datasets für
+  `.cache`/Steam-Bibliothek (angelegt in
+  `scripts/00-disk-and-base-install.sh`) werden bewusst nie gesichert.
+  Dedizierter, passphrase-loser SSH-Key + gepinnter Server-Host-Key liegen
+  verschlüsselt im Vault (`vault_laptop_backup_ssh_key`,
+  `vault_laptop_backup_known_hosts`). Die Server-Seite (Unraid) ist
+  bewusst **nicht** Teil dieses Repos, siehe unten.
 - **Update-Mechanismus** (`docs/UPDATING.md`): `scripts/capture-packages.sh`
   hält die Paketliste aktuell, `scripts/capture-config.sh <pfad>` holt
   gezielt einzelne $HOME-Configs (z. B. Custom-Anpassungen an den
@@ -163,6 +173,11 @@ git config core.hooksPath scripts/git-hooks
   `./setup install` jenseits der Standard-Optionen — läuft per `-f`
   (Force-Mode, alle Rückfragen übersprungen) automatisch mit sinnvollen
   Defaults durch, siehe `docs/NOT_COVERED.md`.
+- Die Server-Seite des ZFS-Backups (derselbe Unraid-Server wie `home_server`
+  in `roles/ssh_client`: `zfsbackup`-User,
+  `zfs allow`-Delegation, `sanoid`-Retention/Pruning, `/boot/config/go`-
+  Persistenz) — eigenes, unabhängiges System, bewusst nicht Teil dieses
+  Repos. `roles/backup` deckt ausschließlich die Laptop-Seite ab.
 
 ## Repo-Struktur
 
@@ -187,8 +202,10 @@ git config core.hooksPath scripts/git-hooks
     ├── dotfiles/          # end-4/dots-hyprland
     ├── hyprland/          # kb_layout etc.
     ├── user_config/       # per capture-config.sh erfasste $HOME-Configs
+    ├── firefox/            # Bookmarks-Backup, Erweiterungen (Policy), kuratierte Prefs
     ├── networkmanager/    # unmanaged tun0
     ├── ssh/                # sshd, Public-Key-only
     ├── ssh_client/         # ~/.ssh Client-Identitäten (github/home_server/firewall/wifi_pi)
-    └── vpn_killswitch/    # OpenVPN-Service, nftables, systemd-sleep-Hook
+    ├── vpn_killswitch/    # OpenVPN-Service, nftables, systemd-sleep-Hook
+    └── backup/             # sanoid/syncoid -> Home-Server (nur Laptop-Seite)
 ```

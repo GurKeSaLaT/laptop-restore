@@ -1,0 +1,20 @@
+# Von Ansible generiert (roles/backup) - nicht von Hand pflegen.
+#
+# home_dataset explizit "recursive = no": mappepool/home/cache und
+# mappepool/home/steam sind eigene Kind-Datasets (angelegt in
+# scripts/00-disk-and-base-install.sh) und sollen NIE gesnapshottet werden
+# (grosses, staendig wechselndes Volumen, kein sinnvolles Backup-Ziel).
+[{{ root_dataset }}]
+    use_template = production
+    recursive = no
+
+[{{ home_dataset }}]
+    use_template = production
+    recursive = no
+
+[template_production]
+    hourly = {{ laptop_backup_local_retention.hourly }}
+    daily = {{ laptop_backup_local_retention.daily }}
+    monthly = {{ laptop_backup_local_retention.monthly }}
+    autosnap = yes
+    autoprune = yes

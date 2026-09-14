@@ -25,6 +25,13 @@ DEFAULT_DISK_DEVICE="$(_yaml_get disk_device)"
 ZPOOL_NAME="$(_yaml_get zpool_name)"
 ROOT_DATASET="${ZPOOL_NAME}/ROOT/arch0"
 HOME_DATASET="${ZPOOL_NAME}/home"
+RESTORE_USER="$(_yaml_get restore_user)"
+# Eigene Kind-Datasets fuer .cache/Steam-Bibliothek (siehe roles/backup) -
+# damit sanoids "recursive: no" auf HOME_DATASET sie automatisch von
+# Snapshots/Backup-Sync ausschliesst (grosses, staendig wechselndes
+# Volumen, kein sinnvolles Backup-Ziel).
+HOME_CACHE_DATASET="${HOME_DATASET}/cache"
+HOME_STEAM_DATASET="${HOME_DATASET}/steam"
 ZBM_KERNEL_CMDLINE="$(_yaml_get zbm_kernel_cmdline)"
 CONSOLE_KEYMAP="$(_yaml_get console_keymap)"
 KERNEL_PKG="$(_yaml_get kernel_pkg)"

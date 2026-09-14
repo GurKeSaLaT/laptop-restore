@@ -68,6 +68,8 @@ aur_packages:
   - nm-sidebar
   - otf-space-grotesk
   - qt6-avif-image-plugin
+  # Enthaelt sowohl sanoid als auch syncoid (ein Paket) - siehe roles/backup.
+  - sanoid
   - ttf-material-symbols-variable-git
   - ttf-readex-pro
   - ttf-rubik-vf

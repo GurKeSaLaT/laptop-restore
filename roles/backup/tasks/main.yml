@@ -1,0 +1,82 @@
+---
+# ZFS-Backup (Laptop -> Home-Server, derselbe wie "home_server" in
+# roles/ssh_client): lokale Snapshots per sanoid,
+# Replikation per syncoid ueber einen eigenen Wrapper+Timer, aber nur wenn
+# roles/vpn_killswitch (/run/vpn-killswitch-state) bestaetigt, dass der
+# Laptop wirklich im Heimnetz ist. Beide Tools kommen aus dem einen
+# AUR-Paket "sanoid" (roles/packages).
+#
+# Die Kind-Datasets mappepool/home/cache und mappepool/home/steam werden
+# NICHT hier angelegt, sondern in scripts/00-disk-and-base-install.sh -
+# reine ZFS-Struktur, kein Ansible-Task (die Rolle laeuft ohnehin erst,
+# nachdem der Pool schon fertig steht).
+#
+# Die Server-Seite (Unraid) ist bewusst NICHT Teil dieses Repos -
+# eigenes, unabhaengiges System, siehe ~/config/zfs-backup-laptop.md
+# (lokal beim Nutzer, nicht im Repo).
+- name: sanoid.conf deployen
+  ansible.builtin.template:
+    src: sanoid.conf.j2
+    dest: /etc/sanoid/sanoid.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: sanoid.timer aktivieren (paket-eigene Unit aus dem AUR-Paket "sanoid")
+  ansible.builtin.systemd_service:
+    name: sanoid.timer
+    enabled: true
+
+- name: /etc/backup-ssh/ anlegen
+  # Eigenes Verzeichnis statt ~/.ssh/: der dedizierte Backup-Key wird von
+  # einem root-laufenden systemd-Timer benutzt, nicht interaktiv vom
+  # Nutzer - soll nicht mit dessen persoenlichen Keys (roles/ssh_client)
+  # vermischt werden.
+  ansible.builtin.file:
+    path: /etc/backup-ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Dedizierten Backup-SSH-Key deployen (passphrase-los, nur fuer diesen Zweck)
+  ansible.builtin.copy:
+    content: "{{ vault_laptop_backup_ssh_key }}"
+    dest: /etc/backup-ssh/laptop_backup
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Gepinnten Host-Key des Backup-Servers deployen (kein Trust-on-first-use im unbeaufsichtigten Lauf)
+  ansible.builtin.template:
+    src: known_hosts.j2
+    dest: /etc/backup-ssh/known_hosts
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Sync-Wrapper-Skript deployen
+  ansible.builtin.template:
+    src: laptop-backup-sync.j2
+    dest: /usr/local/sbin/laptop-backup-sync
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Sync-Timer + -Service deployen
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - laptop-backup-sync.timer
+    - laptop-backup-sync.service
+  notify: systemd daemon-reload
+
+- name: Sync-Timer aktivieren
+  ansible.builtin.systemd_service:
+    name: laptop-backup-sync.timer
+    enabled: true

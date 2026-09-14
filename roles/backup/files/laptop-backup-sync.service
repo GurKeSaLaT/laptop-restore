@@ -1,0 +1,6 @@
+[Unit]
+Description=ZFS backup sync to home server (sanoid/syncoid)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/laptop-backup-sync

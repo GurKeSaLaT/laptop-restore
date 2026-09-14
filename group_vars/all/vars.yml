@@ -62,6 +62,22 @@ ssh_client_public_keys:
   firewall: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDNv/bV3mtrIy0Gsy/q/udPCzq74LPlxgWMc4WSYGZET {{ restore_user }}@firewall"
   wifi_pi: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFy8ArumUv2+XOZHYK7w8d8iC/dTF8oikhqTZezJmrEi {{ restore_user }}@wifi-pi"
 
+# --- ZFS-Backup (Laptop -> Home-Server, derselbe wie "home_server" in
+#     roles/ssh_client) ---
+# sanoid snapshottet lokal, syncoid repliziert per Timer auf den Server -
+# nur wenn roles/vpn_killswitch per /run/vpn-killswitch-state bestaetigt,
+# dass der Laptop gerade wirklich im Heimnetz ist (nicht unterwegs/mobil).
+# Die Server-Seite (Unraid) ist bewusst NICHT Teil dieses Repos -
+# eigenes, unabhaengiges System, wird separat gepflegt. Kind-Datasets fuer
+# .cache/Steam-Bibliothek werden in scripts/00-disk-and-base-install.sh
+# angelegt, nicht hier (ZFS-Ebene, nicht Ansible).
+laptop_backup_local_retention:
+  hourly: 36
+  daily: 30
+  monthly: 3
+laptop_backup_remote_user: zfsbackup
+laptop_backup_remote_base: disk3/backups/laptop
+
 # --- VPN ---
 # vpn_server_host liegt in vault.yml (vault_vpn_server_host) - verraet
 # die private Domain, port/verbindungsname/check-host sind generisch/

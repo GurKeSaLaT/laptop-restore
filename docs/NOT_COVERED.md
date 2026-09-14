@@ -40,3 +40,11 @@
   `roles/zfsbootmenu` rekonstruiert eine plausible `config.yaml`, keine
   1:1-Kopie der Original-Config. Vor dem Vertrauen auf Hardware: in der VM
   testen, dass der erzeugte Boot-Eintrag tatsächlich bootet.
+- **Server-Seite des ZFS-Backups** (derselbe Unraid-Server wie
+  `home_server` in `roles/ssh_client`): `zfsbackup`-
+  User, `zfs allow`-Delegation auf `disk3/backups`, Server-`sanoid.conf`
+  (großzügigere Retention), `/boot/config/go`-Persistenz (Unraid lädt sein
+  OS bei jedem Boot neu aus dem Flash-Image). Bewusst außerhalb des Scopes
+  dieses Repos — eigenes, unabhängiges System, wird separat gepflegt.
+  `roles/backup` deckt ausschließlich die Laptop-Seite ab (sanoid-Config,
+  Sync-Wrapper+Timer, dedizierter SSH-Key).

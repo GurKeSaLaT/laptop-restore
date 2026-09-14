@@ -34,3 +34,5 @@
       tags: [ssh_client]
     - role: vpn_killswitch
       tags: [vpn_killswitch]
+    - role: backup
+      tags: [backup]

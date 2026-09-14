@@ -398,6 +398,15 @@ else
     # Zeilen (Root zuerst, dann "zfs mount -a" fuer Home) die
     # Mount-Reihenfolge bestimmen.
     zfs create -u -o mountpoint=/home "$HOME_DATASET"
+    # Eigene Kind-Datasets fuer .cache/Steam-Bibliothek (roles/backup) -
+    # "-u" aus demselben Grund wie oben bei HOME_DATASET (kein verfruehtes
+    # Auto-Mounten vor dem koordinierten "zfs mount -a" weiter unten).
+    # Muessen VOR dem Anlegen des Benutzers existieren, sonst wuerden
+    # "./cache"/"Steam" als normale Verzeichnisse auf dem Root-Dataset von
+    # HOME_DATASET selbst entstehen (naechster ./setup install / Steam-
+    # Start wuerde sie dort anlegen, nicht als eigenes Dataset).
+    zfs create -u -o mountpoint="/home/${RESTORE_USER}/.cache" "$HOME_CACHE_DATASET"
+    zfs create -u -o mountpoint="/home/${RESTORE_USER}/.local/share/Steam" "$HOME_STEAM_DATASET"
     zfs set "org.zfsbootmenu:commandline=${ZBM_KERNEL_CMDLINE}" "$ROOT_DATASET"
 
     zfs mount "$ROOT_DATASET"
