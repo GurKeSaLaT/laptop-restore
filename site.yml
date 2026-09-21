@@ -22,6 +22,8 @@
       tags: [dotfiles]
     - role: hyprland
       tags: [hyprland]
+    - role: touchpad_dwt
+      tags: [touchpad_dwt]
     - role: user_config
       tags: [user_config]
     - role: firefox

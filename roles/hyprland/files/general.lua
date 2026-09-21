@@ -264,7 +264,11 @@ hl.config({
 
         touchpad = {
             natural_scroll = true,
-            disable_while_typing = true,
+            -- false: libinput's own DWT keeps the touchpad locked for as
+            -- long as any key is held, not just briefly after a keystroke.
+            -- touchpad-dwt-daemon.service replaces it with equivalent
+            -- protection that ignores held keys (see ~/config/touchpad-dwt.md).
+            disable_while_typing = false,
             clickfinger_behavior = true,
             scroll_factor = 0.7
         }

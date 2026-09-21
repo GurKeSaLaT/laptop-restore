@@ -1,0 +1,51 @@
+---
+# Ersetzt libinputs eingebanntes disable_while_typing (sperrt das Trackpad
+# fuer die GESAMTE Dauer, die eine Taste gehalten wird, nicht nur kurz nach
+# dem Anschlag - live verifiziert) durch einen eigenen Daemon, der nur auf
+# echte Tastendruck-Events reagiert. Details und bekannte Einschraenkung
+# (EVIOCGRAB verpasst einen waehrend der Sperre begonnenen Touch) in
+# ~/config/touchpad-dwt.md auf dem Referenzsystem.
+#
+# disable_while_typing = false ist bereits Teil von roles/hyprland/files/general.lua
+# (input.touchpad-Block) - ohne diesen Daemon waere das Trackpad damit
+# ungeschuetzt waehrend des Tippens.
+
+- name: ~/.local/bin fuer {{ restore_user }} sicherstellen
+  ansible.builtin.file:
+    path: "/home/{{ restore_user }}/.local/bin"
+    state: directory
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0755"
+
+- name: touchpad-dwt-daemon.py deployen
+  ansible.builtin.copy:
+    src: touchpad-dwt-daemon.py
+    dest: "/home/{{ restore_user }}/.local/bin/touchpad-dwt-daemon.py"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0755"
+
+- name: ~/.config/systemd/user/graphical-session.target.wants/ fuer {{ restore_user }} sicherstellen
+  ansible.builtin.file:
+    path: "/home/{{ restore_user }}/.config/systemd/user/graphical-session.target.wants"
+    state: directory
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0755"
+
+- name: touchpad-dwt.service deployen
+  ansible.builtin.template:
+    src: touchpad-dwt.service.j2
+    dest: "/home/{{ restore_user }}/.config/systemd/user/touchpad-dwt.service"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0644"
+
+- name: touchpad-dwt.service aktivieren (Symlink statt "systemctl --user enable", siehe Kommentar in roles/vpn_killswitch)
+  ansible.builtin.file:
+    src: ../touchpad-dwt.service
+    dest: "/home/{{ restore_user }}/.config/systemd/user/graphical-session.target.wants/touchpad-dwt.service"
+    state: link
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"

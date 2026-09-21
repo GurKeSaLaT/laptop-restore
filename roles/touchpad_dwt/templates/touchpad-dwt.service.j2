@@ -1,0 +1,12 @@
+[Unit]
+Description=Custom touchpad disable-while-typing (resets only on real keypress, not on held keys)
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/home/{{ restore_user }}/.local/bin/touchpad-dwt-daemon.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

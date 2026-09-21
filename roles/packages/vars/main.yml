@@ -29,6 +29,13 @@ pacman_packages:
   - mtools
   - networkmanager-openvpn
   - plasma-browser-integration
+  # Fuer roles/touchpad_dwt (Daemon liest die interne Tastatur/das
+  # Trackpad direkt per evdev mit, um libinputs eigenes
+  # disable_while_typing zu ersetzen). python-pyudev fuer die dynamische
+  # Geraete-Erkennung (ID_INPUT_KEYBOARD/-TOUCHPAD), damit keine
+  # hardwarespezifischen Bus-Pfade hartkodiert werden muessen.
+  - python-libevdev
+  - python-pyudev
   - rpi-imager
   - rust
   - steam
