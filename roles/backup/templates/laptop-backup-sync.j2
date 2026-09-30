@@ -25,7 +25,12 @@ fi
 
 sync_dataset() {
     local dataset="$1" remote_path="$2"
+    # --create-bookmark: Bookmark des zuletzt uebertragenen Snapshots, damit
+    # der naechste Sync auch dann inkrementell bleibt, wenn sanoid den
+    # gemeinsamen Snapshot laengst weggeraeumt hat (Laptop lange unterwegs).
+    # --sendoptions=c: komprimierter Stream, spart WLAN-Bandbreite.
     syncoid --no-privilege-elevation --no-sync-snap \
+        --create-bookmark --sendoptions=c \
         --sshkey "$SSH_KEY" \
         --sshoption "UserKnownHostsFile=$KNOWN_HOSTS" \
         --sshoption "IdentitiesOnly=yes" \
