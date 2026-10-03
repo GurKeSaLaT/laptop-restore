@@ -57,6 +57,11 @@ EOF
         [ -n "$icanhaz_ip" ] && echo "        ip daddr $icanhaz_ip tcp dport 443 accept"
         [ -n "$nmcheck_ip" ] && echo "        ip daddr $nmcheck_ip tcp dport { 80, 443 } accept"
         [ -n "$extra" ] && echo "        $extra"
+        # IPv6 zu oeffentlichen Zielen sofort ablehnen statt still zu verwerfen: Der Tunnel ist
+        # nur IPv4, Netze mit IPv6 (z.B. Handy-Hotspot) fuehrten sonst zu langen Timeouts, bis
+        # Programme auf IPv4 zurueckfallen. Schutz bleibt gleich - es geht nichts raus (2026-10-03).
+        echo '        ip6 daddr 2000::/3 meta l4proto tcp reject with tcp reset'
+        echo '        ip6 daddr 2000::/3 reject with icmpv6 type admin-prohibited'
         echo '        log prefix "vpnks-drop: " limit rate 20/second'
         echo '    }'
         echo '}'

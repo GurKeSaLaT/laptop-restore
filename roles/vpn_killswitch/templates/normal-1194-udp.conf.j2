@@ -3,3 +3,6 @@
    Pfaden, die diese Rolle deployed - vault_vpn_client_conf ist deshalb
    der volle Datei-Inhalt, hier nur 1:1 durchgereicht. #}
 {{ vault_vpn_client_conf }}
+{# Mobilfunk/Handy-Hotspot: Pfad-MTU nur ~1468 Byte - ohne kleinere TCP-MSS haengen
+   TLS-Handshakes im Tunnel (Ping geht, HTTPS nicht). Doppelt mit der Vault-Config ist harmlos. #}
+mssfix 1360
