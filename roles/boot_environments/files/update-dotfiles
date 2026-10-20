@@ -1,15 +1,31 @@
 #!/usr/bin/env bash
-# Update end-4/dots-hyprland (illogical-impulse) mit ZFS-Rollback-Absicherung.
+# Update end-4/dots-hyprland (illogical-impulse) mit ZFS-Rollback-Absicherung und Live-Log.
+# Log: ~/.local/state/update-logs/, current.log zeigt auf den laufenden/letzten Lauf
+# (Claude liest dort live mit).
 set -euo pipefail
 
-bename="$(sudo zbe-rotate dotfiles)"
+logdir="$HOME/.local/state/update-logs"
+mkdir -p "$logdir"
+log="$logdir/$(date +'%Y-%m-%d_%H%M%S')_update-dotfiles.log"
+: > "$log"
+ln -sfn "$(basename "$log")" "$logdir/current.log"
+# nur die letzten 30 Logs behalten
+ls -1t "$logdir"/*_*.log | tail -n +31 | xargs -r rm --
+
+say() { echo "$@" | tee -a "$log"; }
+# script statt tee: setup sieht ein echtes Terminal (Rueckfragen), -f schreibt sofort ins Log
+run_logged() { script -q -f -e -a -c "$(printf '%q ' "$@")" "$log"; }
+
+say "update-dotfiles gestartet: $(date +'%F %T')"
+bename="$(sudo zbe-rotate dotfiles 2> >(tee -a "$log" >&2))"
 
 cd ~/.cache/dots-hyprland
 
-git stash
-git pull
-./setup install
+run_logged git stash
+run_logged git pull
+run_logged ./setup install
 
 echo
-echo "Update fertig. Rollback-Punkt: '$bename'"
-echo "Falls etwas nicht funktioniert: im ZFSBootMenu-Menü '$bename' auswählen."
+say "Update fertig. Rollback-Punkt: '$bename'"
+say "Falls etwas nicht funktioniert: im ZFSBootMenu-Menü '$bename' auswählen."
+say "Log: $log"

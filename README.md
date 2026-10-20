@@ -109,7 +109,10 @@ git config core.hooksPath scripts/git-hooks
 - `zectl` + `zectl-pacman-hook` (automatisches BE bei Kernel-Updates,
   `pacmanhook-prunecount=3`).
 - Eigene Skripte unter `/usr/local/bin`: `zbe-rotate`, `safe-update`,
-  `update-dotfiles` (24h-Boot-Environment-Rotation vor Updates).
+  `update-dotfiles` (24h-Boot-Environment-Rotation vor Updates). Beide
+  laufen ohne `sudo`, schreiben ein Live-Log nach
+  `~/.local/state/update-logs/` und `safe-update` prüft am Ende DKMS und
+  Initramfs auf Bootfähigkeit.
 - end-4/dots-hyprland (Hyprland-Dotfiles), deutsches Tastaturlayout
   (`kb_layout = "de"`, Konsole `de-latin1`).
 - VPN-Auto-Connect + Kill-Switch: OpenVPN als systemd-Service (nicht über

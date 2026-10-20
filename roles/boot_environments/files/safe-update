@@ -1,16 +1,75 @@
 #!/usr/bin/env bash
+# System-Update mit ZFS-Rollback-Punkt, Live-Log und Boot-Pruefung.
+# Log: ~/.local/state/update-logs/, current.log zeigt auf den laufenden/letzten Lauf
+# (Claude liest dort live mit).
 set -euo pipefail
 
-if [[ $EUID -ne 0 ]]; then
-    echo "Bitte mit sudo ausführen: sudo safe-update" >&2
+if [[ $EUID -eq 0 ]]; then
+    echo "Bitte OHNE sudo ausführen: safe-update (ruft sudo nur intern für den BE-Teil auf)" >&2
     exit 1
 fi
 
-bename="$(zbe-rotate manual)"
+logdir="$HOME/.local/state/update-logs"
+mkdir -p "$logdir"
+log="$logdir/$(date +'%Y-%m-%d_%H%M%S')_safe-update.log"
+: > "$log"
+ln -sfn "$(basename "$log")" "$logdir/current.log"
+# nur die letzten 30 Logs behalten
+ls -1t "$logdir"/*_*.log | tail -n +31 | xargs -r rm --
 
-echo "Starte pacman -Syu"
-pacman -Syu
+say() { echo "$@" | tee -a "$log"; }
+# script statt tee: paru/pacman sehen ein echtes Terminal (Farben, Rueckfragen),
+# -f schreibt jede Zeile sofort ins Log
+run_logged() { script -q -f -e -a -c "$(printf '%q ' "$@")" "$log"; }
+
+say "safe-update gestartet: $(date +'%F %T')"
+bename="$(sudo zbe-rotate manual 2> >(tee -a "$log" >&2))"
+
+say "Starte paru -Syu"
+rc=0
+run_logged paru -Syu || rc=$?
+say "paru beendet mit Exit-Code $rc"
+
+# Boot-Pruefung: fuer jeden installierten Kernel muessen alle DKMS-Module gebaut sein
+# und die Initramfs zfs.ko, den zfs-Hook und /etc/hostid enthalten.
+problems=()
+for moddir in /usr/lib/modules/*/; do
+    [[ -f "$moddir/pkgbase" ]] || continue
+    kver="$(basename "$moddir")"
+    pkgbase="$(<"$moddir/pkgbase")"
+    img="/boot/initramfs-$pkgbase.img"
+    say "Prüfe Kernel $kver ($pkgbase)"
+
+    for mod in /var/lib/dkms/*/; do
+        mod="$(basename "$mod")"
+        if ! dkms status -m "$mod" -k "$kver" | grep -q ': installed'; then
+            problems+=("$kver: DKMS-Modul $mod nicht gebaut")
+        fi
+    done
+
+    if [[ ! -f "$img" ]]; then
+        problems+=("$kver: $img fehlt")
+        continue
+    fi
+    if ! contents="$(sudo lsinitcpio "$img")"; then
+        problems+=("$kver: $img nicht lesbar")
+        continue
+    fi
+    grep -q "^usr/lib/modules/$kver/.*/zfs\.ko" <<<"$contents" || problems+=("$kver: zfs.ko fehlt in $img")
+    grep -q '^hooks/zfs$' <<<"$contents" || problems+=("$kver: zfs-Hook fehlt in $img")
+    grep -q '^etc/hostid$' <<<"$contents" || problems+=("$kver: /etc/hostid fehlt in $img")
+done
 
 echo
-echo "Update fertig. Rollback-Punkt: '$bename'"
-echo "Falls etwas nicht bootet: im ZFSBootMenu-Menü '$bename' auswählen."
+if [[ ${#problems[@]} -eq 0 && $rc -eq 0 ]]; then
+    say "$(printf '\e[1;32m')Boot-Prüfung OK: DKMS-Module und Initramfs vollständig.$(printf '\e[0m')"
+else
+    say "$(printf '\e[1;41;97m')  NICHT NEU STARTEN  $(printf '\e[0m')"
+    [[ $rc -ne 0 ]] && say "  paru ist mit Exit-Code $rc abgebrochen"
+    for p in "${problems[@]}"; do say "  - $p"; done
+fi
+
+echo
+say "Update fertig. Rollback-Punkt: '$bename'"
+say "Falls etwas nicht bootet: im ZFSBootMenu-Menü '$bename' auswählen."
+say "Log: $log"
