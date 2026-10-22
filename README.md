@@ -164,6 +164,8 @@ git config core.hooksPath scripts/git-hooks
   gezielt einzelne $HOME-Configs (z. B. Custom-Anpassungen an den
   end-4-Dotfiles) zurück ins Repo — bewusst kein automatischer
   `~/.config`-Vollsync (Secrets-Risiko, siehe dort).
+  `scripts/check-drift.sh` meldet Abweichungen zwischen laufendem System
+  und Repo (Pakete, erfasste Dateien); Exit 1 bei Drift.
 
 **Nicht abgedeckt** (bewusst, siehe `docs/NOT_COVERED.md`):
 - Die alte, ungenutzte NetworkManager-VPN-Verbindung `normal-1194-udp` mit
@@ -190,6 +192,7 @@ git config core.hooksPath scripts/git-hooks
 │   ├── 00-disk-and-base-install.sh   # Stufe 0: Partitionierung, ZFS, pacstrap
 │   ├── capture-packages.sh           # Update-Mechanismus: Paketliste
 │   ├── capture-config.sh             # Update-Mechanismus: einzelne $HOME-Configs
+│   ├── check-drift.sh                # Abweichung System <-> Repo melden
 │   └── git-hooks/pre-commit          # verhindert Klartext-Secrets im Commit
 ├── site.yml                          # Stufe 1: Ansible-Einstiegspunkt
 ├── inventory/chroot.ini              # Ziel = /mnt via chroot-Connection
@@ -205,6 +208,7 @@ git config core.hooksPath scripts/git-hooks
     ├── dotfiles/          # end-4/dots-hyprland
     ├── hyprland/          # kb_layout etc.
     ├── user_config/       # per capture-config.sh erfasste $HOME-Configs
+    ├── laptop_tools/      # eigene Skripte, fish-Funktionen, User-Timer, step-ca (Privates im Vault)
     ├── firefox/            # Bookmarks-Backup, Erweiterungen (Policy), kuratierte Prefs
     ├── networkmanager/    # unmanaged tun0
     ├── ssh/                # sshd, Public-Key-only
