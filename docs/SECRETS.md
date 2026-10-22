@@ -20,7 +20,7 @@ sehen. GitHub-Secrets lösen ein anderes Problem (CI-Pipelines), nicht
 
 ## Wo das Vault-Passwort aufbewahren?
 
-Drei gängige Optionen, wähl eine (oder kombiniere):
+Vier gängige Optionen, wähl eine (oder kombiniere):
 
 1. **Nur im Kopf / Passwort-Manager, manuell eingeben.**
    `ansible-playbook site.yml --ask-vault-pass` fragt interaktiv danach.
@@ -43,6 +43,12 @@ Drei gängige Optionen, wähl eine (oder kombiniere):
    Setzt voraus, dass du im Live-System Zugriff auf den Passwort-Manager
    hast (Web-Vault reicht, Live-ISO hat i.d.R. einen Browser oder zumindest
    `curl` für die API).
+
+4. **`pass` (GPG-verschlüsselter Store)**, Eintrag `laptop-restore/vault-pass`:
+   `ansible-playbook site.yml --vault-password-file ./scripts/pass-vault-pass.sh`
+   (bei `scripts/00-disk-and-base-install.sh`: `-f ./scripts/pass-vault-pass.sh`).
+   Setzt GPG-Key und Store voraus - auf komplett neuer Hardware gibt es die
+   erst nach Wiederherstellung des Keys. Dort Option 1 oder 2 nutzen.
 
 **Wichtig in jedem Fall:** Das Vault-Passwort darf niemals in dieselbe
 Kette wie "GitHub-Zugang" fallen (z. B. nicht im selben, per SSH-Key
