@@ -9,10 +9,33 @@ VPN_PORT="{{ vpn_server_port }}"
 NM_CHECK_HOST="{{ vpn_nm_check_host }}"
 OVERRIDE_FILE="/run/vpn-killswitch-override"
 STATE_FILE="/run/vpn-killswitch-state"
+DISPLAY_FILE="/run/vpn-killswitch-display"
+TUNNEL_UP_FILE="/run/vpn-killswitch-tunnel-up"
+TUNNEL_HEALTH_CHECK_IP="192.168.0.1"
+LOCK_FILE="/run/vpn-killswitch-apply.lock"
+
+# Nur eine Instanz gleichzeitig (Dispatcher und Timer koennen sich sonst ueberlappen,
+# v.a. beim Gesundheits-Check-Neustart) - nicht-blockierend: eine zweite, sich
+# ueberlappende Instanz ueberspringt ihren Lauf komplett, statt zu warten. Der naechste
+# Timer-Tick/Dispatcher-Event holt den aktuellen Zustand ohnehin wieder ein.
+exec 9>"$LOCK_FILE"
+flock -n 9 || exit 0
 
 log() { logger -t vpn-killswitch "$*"; }
 
 resolve() { getent ahostsv4 "$1" 2>/dev/null | awk '{print $1; exit}'; }
+
+# Aufloesung speziell fuer den VPN-Host: NICHT ueber den lokal konfigurierten Resolver
+# (getent/resolv.conf), sondern per DNS-over-HTTPS direkt an eine feste IP (Cloudflare).
+# Grund: solange der Tunnel noch aktiv ist, zeigt resolv.conf auf den VPN-eigenen
+# (per chattr gesperrten) DNS-Server - und der kann fuer den Heim-Hostnamen per
+# NAT-Reflection/Host-Override eine INTERNE Split-Horizon-Adresse liefern statt der
+# echten oeffentlichen IP. DoH an eine feste IP umgeht jeden lokalen Resolver komplett,
+# unabhaengig vom Tunnelzustand.
+resolve_vpn_host() {
+    curl -s --max-time 4 "https://1.1.1.1/dns-query?name=$1&type=A" -H "accept: application/dns-json" 2>/dev/null \
+        | grep -oE '"data":"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"' | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+}
 
 phys_if() {
     ip -4 route show default 2>/dev/null | awk '{
@@ -39,7 +62,14 @@ EOF
     ipify_ip=$(resolve api.ipify.org)
     icanhaz_ip=$(resolve icanhazip.com)
     nmcheck_ip=$(resolve "$NM_CHECK_HOST")
-    [ "$mode" = "PORTAL" ] && extra='ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 } tcp dport { 80, 443 } accept'
+    if [ "$mode" = "PORTAL" ]; then
+        # Port 443 nur zu privaten/lokalen Zielen (Leck-Risiko klein halten), Port 80
+        # (unverschluesseltes HTTP, typisch fuer Portal-Redirects) ueberall erlaubt -
+        # viele Captive Portals haengen ihre Weiterleitungs-/Redirect-Kette an
+        # oeffentlicher Cloud-Infrastruktur (CDNs etc.), nicht nur am lokalen Gateway.
+        extra='ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 } tcp dport 443 accept
+        tcp dport 80 accept'
+    fi
 
     {
         echo 'flush ruleset'
@@ -52,6 +82,7 @@ EOF
         echo '        udp dport 53 accept'
         echo '        tcp dport 53 accept'
         echo '        oifname "tun0" accept'
+        echo '        ip daddr 1.1.1.1 tcp dport 443 accept'
         [ -n "$vpn_ip" ] && echo "        ip daddr $vpn_ip udp dport $VPN_PORT accept"
         [ -n "$ipify_ip" ] && echo "        ip daddr $ipify_ip tcp dport 443 accept"
         [ -n "$icanhaz_ip" ] && echo "        ip daddr $icanhaz_ip tcp dport 443 accept"
@@ -71,7 +102,7 @@ EOF
 main() {
     local vpn_ip mode phys my_ip prev connectivity
 
-    vpn_ip=$(resolve "$VPN_HOST")
+    vpn_ip=$(resolve_vpn_host "$VPN_HOST")
 
     if [ -e "$OVERRIDE_FILE" ]; then
         mode="HOME"
@@ -99,8 +130,21 @@ main() {
     prev=$(cat "$STATE_FILE" 2>/dev/null)
     if [ "$mode" != "$prev" ]; then
         apply_ruleset "$mode" "$vpn_ip"
-        echo "$mode" > "$STATE_FILE"
         log "state -> $mode (phys=${phys:-none} my_ip=${my_ip:-?} vpn_ip=${vpn_ip:-?})"
+        # Nur cachen, wenn die Ausnahme-Hosts (v.a. der VPN-Server) tatsaechlich aufgeloest
+        # werden konnten. Sonst haetten wir gerade ein zu restriktives Regelwerk geladen
+        # (z.B. weil das Netz noch keine Route hatte) - dann NICHT als "erledigt" cachen,
+        # damit der naechste Lauf (Timer/Dispatcher) sofort erneut versucht, statt bis zum
+        # naechsten echten Moduswechsel auf dem kaputten Regelwerk sitzen zu bleiben.
+        if [ "$mode" = "HOME" ] || [ -n "$vpn_ip" ]; then
+            echo "$mode" > "$STATE_FILE"
+        else
+            log "Aufloesung unvollstaendig (vpn_ip leer), state NICHT gecacht, naechster Lauf versucht erneut"
+            # Alte Modus-Datei verwerfen: sonst steht dort noch der vorherige Modus (z.B. HOME), der naechste Lauf
+            # berechnet wieder HOME (mode == prev) und laedt das Regelwerk NICHT neu - das restriktive Regelwerk
+            # bliebe dann haengen, waehrend die Anzeige HOME zeigt (Fehler 2026-10-22, WLAN-Aussetzer).
+            rm -f "$STATE_FILE"
+        fi
     fi
 
     if [ "$mode" = "HOME" ]; then
@@ -111,8 +155,57 @@ main() {
     else
         if ! systemctl is-active --quiet "$VPN_SERVICE"; then
             systemctl start "$VPN_SERVICE"
+        elif [ -e "$TUNNEL_UP_FILE" ]; then
+            # VPN-Dienst laeuft laut systemd und hatte schon mal erfolgreich verbunden -
+            # trotzdem pruefen, ob der Tunnel nach einem Netzwechsel (WLAN-Wechsel,
+            # Docking, etc.) noch wirklich funktioniert (Ziel ist nur ueber tun0
+            # erreichbar, oifname "tun0" accept deckt das in der Firewall bereits ab).
+            # Erst nach bestaetigtem Erstaufbau aktiv (TUNNEL_UP_FILE), damit ein noch
+            # laufender Verbindungsaufbau nicht vorzeitig abgebrochen wird.
+            if ! ping -c 2 -W 2 "$TUNNEL_HEALTH_CHECK_IP" >/dev/null 2>&1; then
+                log "Tunnel wirkt tot (VPN laut systemd aktiv, aber $TUNNEL_HEALTH_CHECK_IP nicht erreichbar), erzwinge Neustart"
+                # Erst wirklich stoppen (triggert vpnks-down.sh, entsperrt resolv.conf
+                # wieder auf die normale/physische DNS) und DANACH erst neu aufloesen -
+                # NICHT vorher aufloesen, waehrend der alte Tunnel noch steht: dessen
+                # eigener, per chattr gesperrter DNS-Server (pfSense) kann fuer
+                # den Heim-Hostnamen eine interne Split-Horizon-Adresse liefern (NAT-Reflection/
+                # Host-Override) statt der echten oeffentlichen IP - das wuerde die
+                # Firewall-Regel mit einer komplett falschen Ziel-IP neu laden.
+                systemctl stop "$VPN_SERVICE"
+                vpn_ip=""
+                for attempt in 1 2 3; do
+                    vpn_ip=$(resolve_vpn_host "$VPN_HOST")
+                    [ -n "$vpn_ip" ] && break
+                    sleep 1
+                done
+                if [ -z "$vpn_ip" ]; then
+                    log "WARNUNG: VPN-Server-Aufloesung fehlgeschlagen (3 Versuche), Start wird uebersprungen, naechster Timer-Tick versucht es erneut"
+                else
+                    apply_ruleset "$mode" "$vpn_ip"
+                    rm -f "$STATE_FILE"
+                fi
+                systemctl start "$VPN_SERVICE"
+            fi
         fi
     fi
+
+    # Anzeige-Status fuer die Statusleisten-Indikatoranzeige (siehe vpn-status-indicator Plan).
+    # Wird zuletzt geschrieben, damit dieser Wert immer den tatsaechlichen Endzustand dieses
+    # Laufs widerspiegelt (auch wenn vpnks-down.sh waehrend "systemctl stop" zwischenzeitlich
+    # einen anderen Wert gesetzt hat).
+    local display
+    if [ -e "$OVERRIDE_FILE" ]; then
+        display="OVERRIDE"
+    elif [ "$mode" = "HOME" ]; then
+        display="HOME"
+    elif [ -e "$TUNNEL_UP_FILE" ]; then
+        display="CONNECTED"
+    elif [ "$mode" = "PORTAL" ]; then
+        display="PORTAL_DOWN"
+    else
+        display="STRICT_DOWN"
+    fi
+    echo "$display" > "$DISPLAY_FILE"
 }
 
 main "$@"
