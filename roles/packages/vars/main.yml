@@ -11,16 +11,20 @@
 # roles/hardware erkannt (ucode_pkg/gpu_packages), nicht hart hier
 # eingetragen. Macht das Playbook hardwareunabhaengig nutzbar.
 pacman_packages:
+  - age
   - aircrack-ng
   - docker
+  - dmidecode
   - dosfstools
   - efibootmgr
+  - evtest
   - firefox
   - git
   - hashcat
   - hcxdumptool
   - hcxtools
   - less
+  - libinput-tools
   - linux-firmware
   - "{{ kernel_pkg }}"
   - "{{ kernel_headers_pkg }}"
@@ -28,6 +32,9 @@ pacman_packages:
   - man-pages
   - mtools
   - networkmanager-openvpn
+  - obsidian
+  - pacman-contrib
+  - pass
   - plasma-browser-integration
   # Fuer roles/touchpad_dwt (Daemon liest die interne Tastatur/das
   # Trackpad direkt per evdev mit, um libinputs eigenes
@@ -36,16 +43,21 @@ pacman_packages:
   # hardwarespezifischen Bus-Pfade hartkodiert werden muessen.
   - python-libevdev
   - python-pyudev
+  - reflector
   - rpi-imager
+  - rtkit
   - rust
   - steam
+  - step-cli
   - strace
+  - syncthing
   - tree
   - unzip
   - vim
   - wavemon
   - wireshark-qt
   - zip
+  - zram-generator
 
 # Reihenfolge bewusst so belassen, wie auf dem Referenzsystem vorgefunden.
 #
@@ -65,6 +77,7 @@ pacman_packages:
 # - "python-pkg_resources": auf dem AUR nicht (mehr) auffindbar, vermutlich
 #   upstream in setuptools aufgegangen - nicht essenziell.
 aur_packages:
+  - google-chrome
   - adw-gtk-theme-git
   - breeze-plus
   - darkly-bin

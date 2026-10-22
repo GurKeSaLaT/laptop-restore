@@ -121,3 +121,41 @@
     name: bluetooth.service
     enabled: true
   failed_when: false
+
+- name: zram-Swap konfigurieren (zram-generator)
+  ansible.builtin.copy:
+    dest: /etc/systemd/zram-generator.conf
+    content: |
+      [zram0]
+      zram-size = min(ram / 2, 4096)
+      compression-algorithm = zstd
+      swap-priority = 100
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: reflector konfigurieren (Mirrorliste)
+  ansible.builtin.copy:
+    dest: /etc/xdg/reflector/reflector.conf
+    content: |
+      --save /etc/pacman.d/mirrorlist
+      --protocol https
+      --country Germany,Netherlands,Austria,Switzerland,Denmark
+      --age 12
+      --latest 40
+      --sort rate
+      --number 15
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: reflector.timer aktivieren
+  ansible.builtin.systemd_service:
+    name: reflector.timer
+    enabled: true
+
+- name: Syncthing fuer alle Benutzer als User-Dienst aktivieren (Kopplung/Geraete-ID manuell, siehe docs)
+  ansible.builtin.systemd_service:
+    name: syncthing.service
+    scope: global
+    enabled: true
