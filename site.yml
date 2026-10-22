@@ -34,6 +34,8 @@
       tags: [ssh]
     - role: ssh_client
       tags: [ssh_client]
+    - role: laptop_tools
+      tags: [laptop_tools]
     - role: vpn_killswitch
       tags: [vpn_killswitch]
     - role: backup

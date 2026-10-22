@@ -1,0 +1,107 @@
+---
+# Eigene Skripte, Shell-Funktionen und User-Timer vom Referenz-Laptop
+# (erfasst 2026-10-22). Privates (Hostnamen, step-ca-Config, Root-CA) kommt
+# aus vault.yml, nicht aus diesem Verzeichnis.
+- name: Verzeichnisse fuer {{ restore_user }} anlegen
+  ansible.builtin.file:
+    path: "/home/{{ restore_user }}/{{ item.path }}"
+    state: directory
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop:
+    - { path: .local/bin }
+    - { path: .config/fish/functions }
+    - { path: .config/fish/conf.d }
+    - { path: .config/systemd/user }
+    - { path: .config/systemd/user/timers.target.wants }
+    - { path: .step, mode: "0700" }
+    - { path: .step/certs, mode: "0700" }
+    - { path: .step/config, mode: "0700" }
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Skripte nach ~/.local/bin
+  ansible.builtin.copy:
+    src: "bin/{{ item }}"
+    dest: "/home/{{ restore_user }}/.local/bin/{{ item }}"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0755"
+  loop: [notzugang-wache, ssh-askpass-zenity.sh]
+
+- name: update-check-pc (Template - Geraetenamen aus dem Vault)
+  ansible.builtin.template:
+    src: update-check-pc.j2
+    dest: "/home/{{ restore_user }}/.local/bin/update-check-pc"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0755"
+
+- name: fish-Funktionen und conf.d
+  ansible.builtin.copy:
+    src: "fish/{{ item }}"
+    dest: "/home/{{ restore_user }}/.config/fish/{{ item }}"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0644"
+  loop:
+    - functions/sshca.fish
+    - conf.d/sshca-hinweis.fish
+    - conf.d/ssh-agent.fish
+    - conf.d/10-local-bin.fish
+
+- name: systemd-User-Units
+  ansible.builtin.copy:
+    src: "systemd/{{ item }}"
+    dest: "/home/{{ restore_user }}/.config/systemd/user/{{ item }}"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0644"
+  loop:
+    - notzugang-wache.service
+    - notzugang-wache.timer
+    - update-check.service
+    - update-check.timer
+
+- name: Timer aktivieren (Symlink statt "systemctl --user enable", siehe roles/vpn_killswitch)
+  ansible.builtin.file:
+    src: "/home/{{ restore_user }}/.config/systemd/user/{{ item }}"
+    dest: "/home/{{ restore_user }}/.config/systemd/user/timers.target.wants/{{ item }}"
+    state: link
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+  loop: [notzugang-wache.timer, update-check.timer]
+
+- name: step-cli Konfiguration (CA-URL/Fingerprint aus dem Vault)
+  ansible.builtin.copy:
+    content: "{{ vault_step_defaults_json }}"
+    dest: "/home/{{ restore_user }}/.step/config/defaults.json"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0644"
+  no_log: true
+
+- name: Root-CA fuer step-cli
+  ansible.builtin.copy:
+    content: "{{ vault_root_ca_pem }}"
+    dest: "/home/{{ restore_user }}/.step/certs/root_ca.crt"
+    owner: "{{ restore_user }}"
+    group: "{{ restore_user }}"
+    mode: "0600"
+  no_log: true
+
+- name: Root-CA im System-Trust-Store (p11-kit Anchor)
+  ansible.builtin.copy:
+    content: "{{ vault_root_ca_pem }}"
+    dest: /etc/ca-certificates/trust-source/anchors/home-root-ca.crt
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+  register: _root_ca_anchor
+
+- name: Trust-Store neu bauen
+  ansible.builtin.command: update-ca-trust
+  when: _root_ca_anchor.changed
+  changed_when: true

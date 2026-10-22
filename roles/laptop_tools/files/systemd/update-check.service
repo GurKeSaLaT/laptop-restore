@@ -1,0 +1,5 @@
+[Unit]
+Description=Update-Pruefung (nur zaehlen) -> Vault
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/update-check-pc

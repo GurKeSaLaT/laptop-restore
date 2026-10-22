@@ -1,0 +1,10 @@
+[Unit]
+Description=Notzugangs-Key alle 10 s aus dem ssh-agent fernhalten
+
+[Timer]
+OnBootSec=10s
+OnUnitActiveSec=10s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

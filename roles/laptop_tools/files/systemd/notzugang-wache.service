@@ -1,0 +1,6 @@
+[Unit]
+Description=Notzugangs-Key aus allen ssh-agents entfernen
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/notzugang-wache

@@ -1,0 +1,17 @@
+#!/bin/bash
+# update-check-pc - zaehlt verfuegbare Updates (pacman + AUR + Flatpak) ohne etwas zu installieren
+# und schreibt sie in den Vault (Claude/Updates/<host>.json). tower meldet sonntags 18:00 per ntfy.
+# Timer: ~/.config/systemd/user/update-check.timer (So 17:30, Persistent). Vault: Homelab/Doku/Betrieb & Runbooks.md
+set -u
+host=$(hostnamectl hostname 2>/dev/null || hostname)
+case "$host" in
+{{ vault_update_check_names | indent(0) }}
+*) name="$host" ;;
+esac
+pacman_n=$(checkupdates 2>/dev/null | grep -c . || true)
+aur_n=0; command -v paru >/dev/null && aur_n=$(paru -Qua 2>/dev/null | grep -c . || true)
+flat_n=0; command -v flatpak >/dev/null && flat_n=$(flatpak remote-ls --updates 2>/dev/null | grep -c . || true)
+ziel=$HOME/Obsidian/Vault/Claude/Updates/$host.json
+printf '{"name":"%s","host":"%s","zeit":"%s","pacman":%d,"aur":%d,"flatpak":%d}\n' \
+    "$name" "$host" "$(date -Iseconds)" "$pacman_n" "$aur_n" "$flat_n" > "$ziel.tmp" && mv "$ziel.tmp" "$ziel"
+cat "$ziel"
