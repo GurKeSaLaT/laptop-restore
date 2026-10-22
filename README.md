@@ -140,9 +140,8 @@ git config core.hooksPath scripts/git-hooks
   Gerät zulassen: dessen Public Key einfach als zusätzliche Zeile dort
   ergänzen.
 - **SSH-Client-Identitäten** (`roles/ssh_client`): `~/.ssh/config`,
-  `known_hosts` sowie die privaten Schlüssel für `github.com`,
-  `home_server` (Root-Zugriff Heimserver), `firewall` und `wifi_pi` —
-  alle privaten Schlüssel liegen verschlüsselt in `vault.yml`
+  `known_hosts` sowie die privaten Schlüssel für `github.com` —
+  alle privaten Schlüssel (nur `github`; Server-Logins laufen per SSH-Zertifikat/`sshca`, der Notzugang-Key liegt in `pass`) liegen verschlüsselt in `vault.yml`
   (`vault_ssh_client_keys`), die öffentlichen (kein Geheimnis) in
   `vars.yml` (`ssh_client_public_keys`). Die eigentlichen Hostnamen/IPs
   dahinter liegen ebenfalls im Vault (`vault_ssh_client_config_extra`,
@@ -212,7 +211,7 @@ git config core.hooksPath scripts/git-hooks
     ├── firefox/            # Bookmarks-Backup, Erweiterungen (Policy), kuratierte Prefs
     ├── networkmanager/    # unmanaged tun0
     ├── ssh/                # sshd, Public-Key-only
-    ├── ssh_client/         # ~/.ssh Client-Identitäten (github/home_server/firewall/wifi_pi)
+    ├── ssh_client/         # ~/.ssh Client-Identitäten (github)
     ├── vpn_killswitch/    # OpenVPN-Service, nftables, systemd-sleep-Hook
     └── backup/             # sanoid/syncoid -> Home-Server (nur Laptop-Seite)
 ```

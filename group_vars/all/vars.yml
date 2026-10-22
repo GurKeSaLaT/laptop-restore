@@ -58,12 +58,9 @@ ssh_authorized_keys:
 # jeweils unter demselben Key-Namen.
 ssh_client_public_keys:
   github: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFzoyNAC/e6Hf22zuPymGuNI1Q7Algr84q46cStTlqQT {{ restore_user }}@laptop-restore"
-  home_server: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPpYOKYMCQ5HMyWPdAbGu0qBmXmJjFsTeSBYS74JX4Yo {{ restore_user }}@home-server"
-  firewall: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDNv/bV3mtrIy0Gsy/q/udPCzq74LPlxgWMc4WSYGZET {{ restore_user }}@firewall"
-  wifi_pi: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFy8ArumUv2+XOZHYK7w8d8iC/dTF8oikhqTZezJmrEi {{ restore_user }}@wifi-pi"
 
-# --- ZFS-Backup (Laptop -> Home-Server, derselbe wie "home_server" in
-#     roles/ssh_client) ---
+# --- ZFS-Backup (Laptop -> Home-Server, derselbe Server wie der
+#     Root-Zugang, jetzt per SSH-Zertifikat) ---
 # sanoid snapshottet lokal, syncoid repliziert per Timer auf den Server -
 # nur wenn roles/vpn_killswitch per /run/vpn-killswitch-state bestaetigt,
 # dass der Laptop gerade wirklich im Heimnetz ist (nicht unterwegs/mobil).

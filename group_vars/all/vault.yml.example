@@ -83,15 +83,9 @@ vault_ssh_known_hosts_extra: |
 vault_ssh_client_keys:
   github: |
     # CHANGE-ME: Inhalt von ~/.ssh/github (OPENSSH PRIVATE KEY) hier einfuegen.
-  home_server: |
-    # CHANGE-ME: Inhalt von ~/.ssh/home_server hier einfuegen.
-  firewall: |
-    # CHANGE-ME: Inhalt von ~/.ssh/firewall hier einfuegen.
-  wifi_pi: |
-    # CHANGE-ME: Inhalt von ~/.ssh/wifi_pi hier einfuegen.
 
-# ZFS-Backup (Laptop -> Home-Server, derselbe wie "home_server" in
-# roles/ssh_client, siehe roles/backup). Private LAN-IP/Hostname des
+# ZFS-Backup (Laptop -> Home-Server, derselbe Server wie der Root-Zugang,
+# siehe roles/backup). Private LAN-IP/Hostname des
 # Servers - verraet Netzwerkstruktur.
 vault_laptop_backup_remote_host: "CHANGE-ME"
 

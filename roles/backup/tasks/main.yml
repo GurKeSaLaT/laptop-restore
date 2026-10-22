@@ -1,6 +1,6 @@
 ---
-# ZFS-Backup (Laptop -> Home-Server, derselbe wie "home_server" in
-# roles/ssh_client): lokale Snapshots per sanoid,
+# ZFS-Backup (Laptop -> Home-Server, derselbe Server wie der Root-Zugang per SSH-Zertifikat,
+# siehe roles/ssh_client): lokale Snapshots per sanoid,
 # Replikation per syncoid ueber einen eigenen Wrapper+Timer, aber nur wenn
 # roles/vpn_killswitch (/run/vpn-killswitch-state) bestaetigt, dass der
 # Laptop wirklich im Heimnetz ist. Beide Tools kommen aus dem einen
